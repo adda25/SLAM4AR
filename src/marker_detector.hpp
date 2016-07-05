@@ -1,0 +1,7 @@
+#ifndef __MARKER_DETECTOR__HPP
+#define __MARKER_DETECTOR__HPP
+
+
+
+
+#endif // End __MARKER_DETECTOR__HPP
