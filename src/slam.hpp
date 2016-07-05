@@ -39,6 +39,9 @@ typedef struct
   cv::Mat descriptor2;
   int sector;
   cv::Vec3b colour;
+
+  // Expterimental
+  uint desc_sum;
   
   cv::vector<cv::Point3f> match_point_in_marker_frame;
   
@@ -49,7 +52,7 @@ typedef struct
     from_cam_2_match.at<double>(0,3) = coords3d.x;
     from_cam_2_match.at<double>(1,3) = coords3d.y;
     from_cam_2_match.at<double>(2,3) = coords3d.z;
-    cv::Mat res = camera_pose * from_cam_2_match;
+    cv::Mat res = camera_pose* from_cam_2_match;
     cv::Point3f match_in_marker = cv::Point3f(res.at<double>(0,3), res.at<double>(1,3), res.at<double>(2,3));
     match_point_in_marker_frame.push_back(match_in_marker);
   }
@@ -90,44 +93,47 @@ public:
     camera.readFromXMLFile(camera_path);
   }
   
+  /// TODO
   std::vector<Match> map_2_images(cv::Mat image1, cv::Mat image2, cv::Mat relative_pose);
-  std::vector<Match> map_2_images(cv::Mat image1, cv::Mat pose1, cv::Mat image2, cv::Mat pose2, std::vector<Match> old_matches);
+
+  std::vector<Match> map_2_images(cv::Mat image1, 
+                                  cv::Mat pose1, 
+                                  cv::Mat image2, 
+                                  cv::Mat pose2, 
+                                  std::vector<Match> old_matches);
+
   cv::Mat calc_pose_with_matches(cv::Mat image, std::vector<Match> matches);
-  
   std::vector<cv::KeyPoint> search_features(cv::Mat image);
   cv::Mat extract_descriptors(cv::Mat image, std::vector<cv::KeyPoint> keypoints);
+
   std::vector<cv::DMatch> match_features(std::vector<cv::KeyPoint> keypoints1, 
-                                         cv::Mat descriptors1, 
+                                         cv::Mat                   descriptors1, 
                                          std::vector<cv::KeyPoint> keypoints2, 
-                                         cv::Mat descriptors2);
+                                         cv::Mat                   descriptors2);
                                          
-  void split_matches(std::vector<cv::DMatch>   matches, 
-                     std::vector<cv::KeyPoint> keypoints1,
-                     cv::Mat descriptors1, 
-                     std::vector<cv::KeyPoint> keypoints2, 
-                     cv::Mat descriptors2,
-                     std::vector<SingleMatchPoint>& match1, 
-                     std::vector<SingleMatchPoint>& match2);
+  void split_matches(std::vector<cv::DMatch>        matches, 
+                     std::vector<cv::KeyPoint>      keypoints1,
+                     cv::Mat                        descriptors1, 
+                     std::vector<cv::KeyPoint>      keypoints2, 
+                     cv::Mat                        descriptors2,
+                     std::vector<SingleMatchPoint> &match1, 
+                     std::vector<SingleMatchPoint> &match2);
                      
-  std::vector<Match> triangulate(cv::Mat image1,
-                     std::vector<SingleMatchPoint> matched_points1, 
-                     cv::Mat pose1, 
-                     std::vector<SingleMatchPoint> matched_points2, 
-                     cv::Mat pose2);
-                   
-  std::vector<cv::DMatch> match_with_features(std::vector<cv::KeyPoint> keypoints1, 
-                                              cv::Mat descriptor1, 
-                                              std::vector<cv::KeyPoint> keypoints2, 
-                                              cv::Mat descriptor2);
+  std::vector<Match> triangulate(cv::Mat            image1,
+                     std::vector<SingleMatchPoint>  matched_points1, 
+                     cv::Mat                        pose1, 
+                     std::vector<SingleMatchPoint>  matched_points2, 
+                     cv::Mat                        pose2);
+                     
+  cv::Mat estimated_pose(std::vector<Match>         matches);
+
+  cv::Mat estimated_pose(cv::vector<cv::Point2f>    img_points_vector, 
+                         cv::vector<cv::Point3f>    obj_points_vector);
   
-  cv::Mat estimated_pose(std::vector<Match> matches);
-  cv::Mat estimated_pose(cv::vector<cv::Point2f> img_points_vector, 
-                         cv::vector<cv::Point3f> obj_points_vector);
-  
-  void draw_estimated_map(std::vector<Match> matches, 
-                          cv::Mat& image, 
-                          cv::Mat tr_vec, 
-                          cv::Mat rot_vec);
+  void draw_estimated_map(std::vector<Match>        matches, 
+                          cv::Mat                   &image, 
+                          cv::Mat                   tr_vec, 
+                          cv::Mat                   rot_vec);
   
   void refine_old_matches();
     
@@ -135,7 +141,6 @@ public:
   cv::Ptr<cv::DescriptorExtractor> descriptions_extractor;
   RobustMatcher robust_matcher;
   MyCamereParamReader camera;  
-  float closest_match_distance = 1.0;
 
 private:
   std::vector<double> solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22);

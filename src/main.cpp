@@ -24,7 +24,6 @@ test_map_system(std::vector<int> params) {
   EyesHelper helper = EyesHelper(camera_path);
   cv::VideoCapture capture(video_path);
   std::vector<std::vector<Match>> total_matches = helper.slam_map(capture, params[1], params[2]);
-  
   // Write point cloud to file
   std::ofstream ofs;
   ofs.open ("point_cloud.txt", std::ofstream::out | std::ofstream::app);

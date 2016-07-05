@@ -59,7 +59,7 @@ EyesHelper::slam_map(cv::VideoCapture capture, int count, float min_dist) {
           std::cout << "Matched points: " << tm.size() << std::endl;
           total_matches.push_back(tm);
           if (tm.size() < 4) { continue; }
-          std::cout << "Real pose: " << m1.marker[0].pose() << std::endl;
+          std::cout << "Real pose: " << m2.marker[0].pose() << std::endl;
           cv::Mat estimated_pose = slam.estimated_pose(tm);
           std::cout << "Estimated pose: " << estimated_pose << std::endl;
           new_joined_matches = join_matches(total_matches);
@@ -101,8 +101,7 @@ EyesHelper::slam_localize(cv::VideoCapture capture_test, int count_test, std::ve
   ofs.open ("poses.csv", std::ofstream::out | std::ofstream::app);
   ofs << "r_x, " << "r_y, " << "r_z, " << "e_x, " << "e_y, " << "e_z, " << "\n";
   for (int i = 0; i < real_poses.size(); i++) {
-    if (estimated_poses[i].z == 0) { 
-      std::cout << "Not valid estimated pose" << std::endl;
+    if (estimated_poses[i].z <= 0) { 
       continue; 
     }
     ofs << real_poses[i].x << "," << real_poses[i].y << "," << real_poses[i].z << "," 
