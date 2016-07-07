@@ -3,6 +3,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <vector>
+#include <fstream>
 #include "slam.hpp"
 #include "marker.hpp"
 

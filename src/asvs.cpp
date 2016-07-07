@@ -1,5 +1,5 @@
 #include "asvs.hpp"
-#include <fstream>
+
 
 template <typename T> void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& distance) {
     T x = trvec2.at<T>(0,0) - trvec1.at<T>(0,0);
@@ -8,16 +8,6 @@ template <typename T> void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& dist
     distance = sqrt(pow(x,2) + pow(y,2) + pow(z,2));
 }
 
-std::vector<Match> join_matches(std::vector<std::vector<Match>> matches) {
-  std::vector<Match> tot_matches;
-  size_t t_size = 0;
-  for (int i = 0; i < matches.size(); i++) { t_size += matches[i].size(); }
-  tot_matches.reserve(t_size);
-  for (int i = 0; i < matches.size(); i++) {
-    tot_matches.insert(tot_matches.end(), matches[i].begin(), matches[i].end());
-  }
-  return tot_matches;
-}
 
 std::vector<std::vector<Match>> 
 EyesHelper::slam_map(cv::VideoCapture capture, int count, float min_dist) {
@@ -62,7 +52,7 @@ EyesHelper::slam_map(cv::VideoCapture capture, int count, float min_dist) {
           std::cout << "Real pose: " << m2.marker[0].pose() << std::endl;
           cv::Mat estimated_pose = slam.estimated_pose(tm);
           std::cout << "Estimated pose: " << estimated_pose << std::endl;
-          new_joined_matches = join_matches(total_matches);
+          new_joined_matches = slam.join_matches(total_matches);
           //slam.draw_estimated_map(tm, image, m1.marker[0].trVec, m1.marker[0].rotVec);
           //cv::imshow("n", image);
           //cv::waitKey(5000);
@@ -81,7 +71,7 @@ EyesHelper::slam_localize(cv::VideoCapture capture_test, int count_test, std::ve
   MyMarkerDetector marker_detector = MyMarkerDetector(120.0, camera_path);
   Marker m1;
   
-  tot_matches = join_matches(matches);
+  tot_matches = slam.join_matches(matches);
   std::cout << "Start video test" << std::endl;
   cv::Mat image;
   for (int i = 0; i < count_test; i++) {

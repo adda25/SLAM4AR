@@ -1,20 +1,27 @@
 #include "slam.hpp"
 
 std::chrono::high_resolution_clock::time_point
-get_chrono() {
-  return std::chrono::high_resolution_clock::now();
-}
+get_chrono() { return std::chrono::high_resolution_clock::now(); }
 
-void measure_chrono(std::chrono::high_resolution_clock::time_point start_time, std::string mex) {
+
+void 
+measure_chrono(std::chrono::high_resolution_clock::time_point start_time, 
+               std::string mex) 
+{
   std::chrono::high_resolution_clock::time_point stop_chrono = get_chrono();
   std::chrono::duration<double> time_span = std::chrono:: duration_cast<std::chrono::duration<double> >(stop_chrono - start_time);
   std::cout << mex << time_span.count() << " seconds." << std::endl;
 }
 
-cv::Mat rot_tr_mat(cv::Mat rot, cv::Mat tr) {
+
+cv::Mat 
+rot_tr_mat(cv::Mat rot, cv::Mat tr) 
+{
     cv::Mat result(4, 4, CV_64FC1);
     for (int i = 0; i < 3; i++) {
-        for (int k = 0; k < 3; k++) { result.at<double>(i,k) = rot.at<double>(i,k); }
+        for (int k = 0; k < 3; k++) { 
+          result.at<double>(i,k) = rot.at<double>(i,k); 
+        }
     }
     result.at<double>(0,3) = tr.at<double>(0,0);
     result.at<double>(1,3) = tr.at<double>(1,0);
@@ -26,13 +33,6 @@ cv::Mat rot_tr_mat(cv::Mat rot, cv::Mat tr) {
     return result;
 }
 
-uint compute_desc_sum(cv::Mat desc) {
-  uint sum = 0;
-  for (int i = 0; i < desc.cols; i++) {
-      sum += (uint)desc.at<uchar>(0, i);
-    }
-  return sum;
-}
 
 // 1080p
 /*
@@ -47,8 +47,10 @@ cam_point_from_pixel(cv::Point2f point, double z) {
 }*/
 // 720p
 
+
 cv::Mat 
-cam_point_from_pixel(cv::Point2f point, double z) {
+cam_point_from_pixel(cv::Point2f point, double z) 
+{
   cv::Mat result(4, 1, CV_64FC1);
   result.at<double>(0,0) = (point.x - 640) * z / 1152;
   result.at<double>(1,0) = (point.y - 360) * z / 1152;
@@ -57,11 +59,14 @@ cam_point_from_pixel(cv::Point2f point, double z) {
   return result;
 }
 
+
 std::vector<Match> 
-Slam::map_2_images(cv::Mat image1, cv::Mat image2, cv::Mat relative_pose) {
+Slam::map_2_images(cv::Mat image1, cv::Mat image2, cv::Mat relative_pose) 
+{
   std::vector<Match> total_matches;
   return total_matches;
 }
+
 
 std::vector<Match> 
 Slam::map_2_images(cv::Mat image1, 
@@ -72,18 +77,21 @@ Slam::map_2_images(cv::Mat image1,
 {
   std::vector<SingleMatchPoint> matched_points1;
   std::vector<SingleMatchPoint> matched_points2;
-  std::vector<cv::KeyPoint> keypoints1    = search_features(image1);
-  std::vector<cv::KeyPoint> keypoints2    = search_features(image2);
-  cv::Mat descriptors1                    = extract_descriptors(image1, keypoints1);
-  cv::Mat descriptors2                    = extract_descriptors(image2, keypoints2);
-  std::vector<cv::DMatch> matches         = match_features(keypoints1, descriptors1, keypoints2, descriptors2);
+  std::vector<cv::KeyPoint> keypoints1 = search_features(image1);
+  std::vector<cv::KeyPoint> keypoints2 = search_features(image2);
+  cv::Mat descriptors1 = extract_descriptors(image1, keypoints1);
+  cv::Mat descriptors2 = extract_descriptors(image2, keypoints2);
+  std::vector<cv::DMatch> matches = match_features(descriptors1, descriptors2);
   split_matches(matches, keypoints1, descriptors1, keypoints2, descriptors2, matched_points1, matched_points2);
-  std::vector<Match> total_matches        = triangulate(image1, matched_points1, pose1, matched_points2, pose2);  
+  std::vector<Match> total_matches = triangulate(image1, matched_points1, pose1, matched_points2, pose2);  
+  // Should clean the double matches;
   return total_matches;
 }
 
+
 cv::Mat
-Slam::calc_pose_with_matches(cv::Mat image, std::vector<Match> matches) {
+Slam::calc_pose_with_matches(cv::Mat image, std::vector<Match> matches) 
+{
   std::chrono::high_resolution_clock::time_point st = get_chrono();
   std::vector<cv::KeyPoint> old_keypoints;
   std::vector<SingleMatchPoint> matched_points1;
@@ -95,60 +103,70 @@ Slam::calc_pose_with_matches(cv::Mat image, std::vector<Match> matches) {
   std::vector<cv::DMatch> new_matches;
   std::vector<cv::KeyPoint> keypoints;
   cv::Mat descriptors;
-  
+  std::vector<MapMatchFt> mapMatchFt;
   keypoints = search_features(image);
   descriptors = extract_descriptors(image, keypoints);
-  for(auto &m : matches) {
-    old_descriptors.push_back(m.descriptor2);
-    old_keypoints.push_back(m.keypoint2);
-  }
-  new_matches = match_features(old_keypoints, old_descriptors, keypoints, descriptors);
+  for(auto &m : matches) { old_descriptors.push_back(m.descriptor2); old_keypoints.push_back(m.keypoint2); }
+  new_matches = match_features(old_descriptors, descriptors);
+  std::cout << "Match before: " << matches.size() << " Match after: " << new_matches.size() << std::endl;
   split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
-  std::cout << "Matchs size: " << matched_points1.size() << " " << matched_points2.size() << std::endl;
-  std::chrono::high_resolution_clock::time_point stc = get_chrono();
-  for (int k = 0; k < matched_points2.size(); k++) {
-    Match closest_match;
-    bool close_enough = find_closest_match(matched_points2[k], matches, closest_match);
-    if (!close_enough) { continue; }
-    img_points_vector.push_back(matched_points2[k].keypoint.pt);
-    obj_points_vector.push_back(closest_match.match_point_in_marker_frame[0]);
+  //std::chrono::high_resolution_clock::time_point stc = get_chrono(); ///////////////////////////////////////////
+  for (int i = 0; i < matched_points1.size(); i++) {
+    std::vector<cv::DMatch> m = match_features(matched_points1[i].descriptor, matched_points2[i].descriptor);
+    std::cout << m.size() << " " << m[0].distance << std::endl; 
+    cv::Point2f new_old_pt = matched_points1[i].keypoint.pt;
+    for(auto &mm : matches) {
+      if (mm.keypoint2.pt == new_old_pt) {
+        mapMatchFt.push_back(MapMatchFt{matched_points1[i], matched_points2[i], mm, (int)m[0].distance});
+        break;
+      }
+    }
+    if (m[0].distance < 20) {
+      img_points_vector.push_back(mapMatchFt.back().new_found_ft_in_new_image.keypoint.pt);
+      obj_points_vector.push_back(mapMatchFt.back().ref_match.match_point_in_marker_frame[0]); 
+    }
   }
-  measure_chrono(stc, "-> calc_pose_with_matches::close_match time: ");
-  std::cout << "obj_points: " << obj_points_vector.size() << std::endl;
-  if (img_points_vector.size() != obj_points_vector.size() || obj_points_vector.size() < 6) {
+
+  /*for(int i = 0; i < matched_points1.size(); i++) {
+    cv::Point2f new_old_pt = matched_points1[i].keypoint.pt;
+    for(auto &m : matches) {
+      if (m.keypoint2.pt == new_old_pt) {
+        mapMatchFt.push_back(MapMatchFt{matched_points1[i], matched_points2[i], m});
+        break;
+      }
+    }
+  }*/
+  std::cout << "Founded corr: " << mapMatchFt.size() << std::endl;
+  /*for (int k = 0; k < mapMatchFt.size(); k++) {
+    int counter = 0;
+    int drift = 0;
+    for (int d = 0; d < mapMatchFt[k].new_found_ft_in_new_image.descriptor.cols; d++) {
+      uint old_d = (uint)mapMatchFt[k].new_found_ft.descriptor.at<uchar>(0,d);
+      uint new_d = (uint)mapMatchFt[k].new_found_ft_in_new_image.descriptor.at<uchar>(0,d);
+      if ((int)old_d < (int)(new_d) + 1 && (int)old_d > (int)(new_d) - 1) {
+        counter++;
+        drift += abs((int)old_d - (int)new_d);
+      }
+    }
+    mapMatchFt[k].accuracy_index = counter; // OLD -> if (counter > 20) { img_p... obj_p...}
+  }
+  std::sort(mapMatchFt.begin(), mapMatchFt.end(), std::greater<MapMatchFt>());
+  //measure_chrono(stc, "-> calc_pose_with_matches::close_match time: ");
+  if (mapMatchFt.size() > 10 && mapMatchFt[6].accuracy_index > 20) {
+    for (int i = 0; i < 10; i++) {
+      img_points_vector.push_back(mapMatchFt[i].new_found_ft_in_new_image.keypoint.pt);
+      obj_points_vector.push_back(mapMatchFt[i].ref_match.match_point_in_marker_frame[0]); 
+      //std::cout << mapMatchFt[i].new_found_ft_in_new_image.keypoint.pt << " " << mapMatchFt[i].ref_match.keypoint2.pt  << " " << mapMatchFt[i].new_found_ft.keypoint.pt << std::endl;
+    }
+
+  } else {
     return cv::Mat(4, 4, CV_64F, double(0));
-  }
-  // pose = estimated_pose(final_mathes);
+  }*/
   pose = estimated_pose(img_points_vector, obj_points_vector);
   measure_chrono(st, "-> calc_pose_with_matches time: ");
   return pose;
 }
 
-/* find_closest_match */
-/*bool 
-Slam::find_closest_match(SingleMatchPoint point_to_search, 
-                         std::vector<Match> reference_matches, 
-                         Match& closest_match) 
-{
-  uint target_sum = compute_desc_sum(point_to_search.descriptor);
-  int index = 0;
-  int closest_sum = 0;
-  int closest_diff = abs((int)((int)reference_matches[0].desc_sum - (int)target_sum));
-  for (int i = 0; i < reference_matches.size(); i++) {
-    int ac_diff = abs((int)((int)reference_matches[i].desc_sum - (int)target_sum));
-    if (ac_diff < abs(closest_diff)) {
-      index = i;
-      closest_diff = ac_diff;
-      closest_sum = (int)reference_matches[i].desc_sum;
-    }
-  }
-  if (closest_diff > 1) {
-    return false;
-  }
-  std::cout << "closest_diff: " << closest_diff << " closest_sum: " << closest_sum <<  "  target_sum: " << target_sum << std::endl;
-  closest_match = reference_matches[index];
-  return true;  
-}*/
 
 /* find_closest_match */
 bool 
@@ -157,10 +175,9 @@ Slam::find_closest_match(SingleMatchPoint point_to_search,
                          Match& closest_match) 
 {
   std::vector<uint> point_to_search_desc;
-  std::vector<int> eq_val_vec; 
-  int min_index = 0;
+  std::vector<int>  eq_val_vec; 
+  int min_index  = 0;
   int max_eq_val = 0;
-  
   for (int i = 0; i < point_to_search.descriptor.cols; i++) {
     point_to_search_desc.push_back((uint)point_to_search.descriptor.at<uchar>(0,i));
   } 
@@ -171,7 +188,7 @@ Slam::find_closest_match(SingleMatchPoint point_to_search,
     }
     int eq_val = 0;
     for (int k = 0; k < ref_m_desc.size(); k++) {
-      if (ref_m_desc[k] <= point_to_search_desc[k] + 2 && ref_m_desc[k] >= point_to_search_desc[k] - 2) {
+      if (ref_m_desc[k] <= (int)(point_to_search_desc[k] + 2) && ref_m_desc[k] >= (int)(point_to_search_desc[k] - 2)) {
         eq_val++;
       }
     }
@@ -190,37 +207,39 @@ Slam::find_closest_match(SingleMatchPoint point_to_search,
   return true;  
 }
 
+
 std::vector<cv::KeyPoint> 
-Slam::search_features(cv::Mat image) {
+Slam::search_features(cv::Mat image) 
+{
   std::vector<cv::KeyPoint> keypoints;
   features_detector->detect(image, keypoints);
   return keypoints;
 } 
 
+
 cv::Mat 
-Slam::extract_descriptors(cv::Mat image, std::vector<cv::KeyPoint> keypoints) {
+Slam::extract_descriptors(cv::Mat image, std::vector<cv::KeyPoint> keypoints) 
+{
   cv::Mat descriptors;
   descriptions_extractor->compute(image, keypoints, descriptors);
   return descriptors;
 }
 
+
 std::vector<cv::DMatch> 
-Slam::match_features(std::vector<cv::KeyPoint> keypoints1, 
-                     cv::Mat descriptors1, 
-                     std::vector<cv::KeyPoint> keypoints2, 
-                     cv::Mat descriptors2) 
+Slam::match_features(cv::Mat descriptors1, cv::Mat descriptors2) 
 {
   std::vector<std::vector<cv::DMatch>> matches;
   std::vector<cv::DMatch> tot_matches;
   size_t t_size = 0;
   cv::BFMatcher matcher = cv::BFMatcher(cv::NORM_HAMMING, true);
-  
   matcher.knnMatch(descriptors1, descriptors2, matches, 1);
   for (auto &m : matches) { t_size += m.size(); }
   tot_matches.reserve(t_size);
   for (auto &m : matches) { tot_matches.insert(tot_matches.end(), m.begin(), m.end()); }
   return tot_matches;  
 }
+
 
 void 
 Slam::split_matches(std::vector<cv::DMatch> matches, 
@@ -243,6 +262,7 @@ Slam::split_matches(std::vector<cv::DMatch> matches,
     match2.push_back(p2);
   }
 }
+
 
 std::vector<Match> 
 Slam::triangulate(cv::Mat image1, 
@@ -278,16 +298,16 @@ Slam::triangulate(cv::Mat image1,
     match.reference_pose   = pose1;
     match.reference_pose_2 = pose2;
     match.match_position_in_marker_frame(pose1.inv());
-    match.desc_sum         = compute_desc_sum(match.descriptor1);
-
     match.colour = image1.at<cv::Vec3b>(matched_points1[gm].keypoint.pt);
     total_matches.push_back(match);
   }
   return total_matches;
 }
 
+
 cv::Mat 
-Slam::estimated_pose(std::vector<Match> matches) {
+Slam::estimated_pose(std::vector<Match> matches) 
+{
   cv::Mat pose;
   cv::Mat rVec, tVec, rot_mat;
   cv::vector<cv::Point2f> img_points_vector;
@@ -302,8 +322,10 @@ Slam::estimated_pose(std::vector<Match> matches) {
   return pose;
 }
 
+
 cv::Mat 
-Slam::estimated_pose(cv::vector<cv::Point2f> img_points_vector, cv::vector<cv::Point3f> obj_points_vector) {
+Slam::estimated_pose(cv::vector<cv::Point2f> img_points_vector, cv::vector<cv::Point3f> obj_points_vector) 
+{
   cv::Mat pose;
   cv::Mat rVec, tVec, rot_mat;
   cv::solvePnP(obj_points_vector, img_points_vector, camera.getCameraMatrix(), camera.getDistorsion(), rVec, tVec, false, CV_ITERATIVE);
@@ -312,8 +334,10 @@ Slam::estimated_pose(cv::vector<cv::Point2f> img_points_vector, cv::vector<cv::P
   return pose;
 }
 
+
 void 
-Slam::draw_estimated_map(std::vector<Match> matches, cv::Mat& image, cv::Mat tr_vec, cv::Mat rot_vec) {
+Slam::draw_estimated_map(std::vector<Match> matches, cv::Mat& image, cv::Mat tr_vec, cv::Mat rot_vec) 
+{
   for (auto &m : matches) {
     std::vector<cv::Point2f> p = m.calc_image_point_for_frame(camera, rot_vec, tr_vec);
     cv::circle(image, p[0], 5, cv::Scalar(0, 255, 255), 2);
@@ -327,14 +351,14 @@ Slam::draw_estimated_map(std::vector<Match> matches, cv::Mat& image, cv::Mat tr_
   }
 }
 
+
 void
-Slam::refine_old_matches() {
-  
-}
+Slam::refine_old_matches() {}
 
 /*  A x = B  */
 std::vector<double> 
-Slam::solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22) {
+Slam::solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22) 
+{
     cv::Mat A = cv::Mat(3, 2, CV_64F);
     cv::Mat B = cv::Mat(3, 1, CV_64F);
     cv::Mat X;
@@ -366,6 +390,42 @@ Slam::solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv:
     return sol;
 }
 
+std::vector<Match> 
+Slam::join_matches(std::vector<std::vector<Match>> matches) 
+{
+  std::vector<Match> tot_matches;
+  size_t t_size = 0;
+  for (int i = 0; i < matches.size(); i++) { t_size += matches[i].size(); }
+  tot_matches.reserve(t_size);
+  for (int i = 0; i < matches.size(); i++) {
+    tot_matches.insert(tot_matches.end(), matches[i].begin(), matches[i].end());
+  }
+  return tot_matches;
+}
+
+/// TODO
+std::vector<Match> 
+Slam::remove_double_matches(std::vector<Match> matches) 
+{
+  std::vector<Match> cleaned_matches;
+  return cleaned_matches;
+}
+
+void
+Slam::write_point_cloud(std::string filename, std::vector<Match> matches) {
+  // Write point cloud to file
+  std::ofstream ofs;
+  ofs.open (filename, std::ofstream::out | std::ofstream::app);
+  for (auto &m : matches) {
+      //std::cout << m.match_point_in_marker_frame << std::endl;
+      ofs << m.match_point_in_marker_frame[0].x << " " 
+        << m.match_point_in_marker_frame[0].y   << " " 
+          << m.match_point_in_marker_frame[0].z << " " 
+            << (int)m.colour.val[2] << " " << (int)m.colour.val[1] << " " << (int)m.colour.val[0] << "\n";
+  }
+  ofs.close();
+}
+
 /*for (int i = 0; i < matched_points2.size(); i++) {
   Match ref_match;
   bool already_match = find_closest_match(matched_points2[i], old_matches, ref_match);
@@ -374,3 +434,21 @@ Slam::solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv:
     matched_points1.erase(matched_points1.begin() + i);
   }
 }*/
+
+    ///////////////////////////////////////////
+  ///////////////////////////////////////////
+  /*
+  std::chrono::high_resolution_clock::time_point stc = get_chrono();
+  for (int k = 0; k < matched_points2.size(); k++) {
+    Match closest_match;
+    bool close_enough = find_closest_match(matched_points2[k], matches, closest_match);
+    if (!close_enough) { continue; }
+    img_points_vector.push_back(matched_points2[k].keypoint.pt);
+    obj_points_vector.push_back(closest_match.match_point_in_marker_frame[0]);
+  }*
+  measure_chrono(stc, "-> calc_pose_with_matches::close_match time: ");*/
+  /*std::cout << "obj_points: " << obj_points_vector.size() << std::endl;
+  if (img_points_vector.size() != obj_points_vector.size() || obj_points_vector.size() < 6) {
+    return cv::Mat(4, 4, CV_64F, double(0));
+  }*/
+  // pose = estimated_pose(final_mathes);
