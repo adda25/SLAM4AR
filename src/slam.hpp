@@ -18,7 +18,7 @@
 #include <fstream>
 #include "/usr/local/include/eigen/Eigen/Dense"
 #include "camera_param_reader.hpp"
-#include "robust_matcher.hpp"
+#include "map.hpp"
 
 
 typedef struct
@@ -100,11 +100,11 @@ public:
   
   Slam(std::string camera_path) 
   {
-    robust_matcher = RobustMatcher();
     features_detector = new cv::OrbFeatureDetector(4000);
     descriptions_extractor = new cv::OrbDescriptorExtractor();
     camera = MyCamereParamReader();
     camera.readFromXMLFile(camera_path);
+    slam_map = SlamMap(5, 100);
   }
   
   /// TODO
@@ -127,10 +127,10 @@ public:
   search_features(cv::Mat image);
   
   cv::Mat 
-  extract_descriptors(cv::Mat image, std::vector<cv::KeyPoint> keypoints);
+  extract_descriptors(cv::Mat &image, std::vector<cv::KeyPoint> &keypoints);
 
   std::vector<cv::DMatch> 
-  match_features(cv::Mat descriptors1, cv::Mat descriptors2);
+  match_features(cv::Mat &descriptors1, cv::Mat &descriptors2);
                                          
   void 
   split_matches(std::vector<cv::DMatch> matches, 
@@ -173,23 +173,21 @@ public:
     
   cv::Ptr<cv::FeatureDetector> features_detector;
   cv::Ptr<cv::DescriptorExtractor> descriptions_extractor;
-  RobustMatcher robust_matcher;
   MyCamereParamReader camera;  
+
+  SlamMap slam_map;
 
 private:
   std::vector<double> 
   solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22);
-
-  bool 
-  find_closest_match(SingleMatchPoint point_to_search, 
-                     std::vector<Match> reference_matches, 
-                     Match &closest_match);
   
   bool 
   check_match_presence(SingleMatchPoint point_to_search, 
                        SingleMatchPoint point_ref, 
                        std::vector<Match> reference_matches, 
                        Match &closest_match);
+
+
 };
 
 #endif // End __SLAM_HPP

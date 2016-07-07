@@ -88,7 +88,6 @@ Slam::map_2_images(cv::Mat image1,
   return total_matches;
 }
 
-
 cv::Mat
 Slam::calc_pose_with_matches(cv::Mat image, std::vector<Match> matches) 
 {
@@ -110,10 +109,8 @@ Slam::calc_pose_with_matches(cv::Mat image, std::vector<Match> matches)
   new_matches = match_features(old_descriptors, descriptors);
   std::cout << "Match before: " << matches.size() << " Match after: " << new_matches.size() << std::endl;
   split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
-  //std::chrono::high_resolution_clock::time_point stc = get_chrono(); ///////////////////////////////////////////
   for (int i = 0; i < matched_points1.size(); i++) {
     std::vector<cv::DMatch> m = match_features(matched_points1[i].descriptor, matched_points2[i].descriptor);
-    std::cout << m.size() << " " << m[0].distance << std::endl; 
     cv::Point2f new_old_pt = matched_points1[i].keypoint.pt;
     for(auto &mm : matches) {
       if (mm.keypoint2.pt == new_old_pt) {
@@ -121,92 +118,34 @@ Slam::calc_pose_with_matches(cv::Mat image, std::vector<Match> matches)
         break;
       }
     }
-    if (m[0].distance < 20) {
+    if (mapMatchFt.back().accuracy_index < 20) {
       img_points_vector.push_back(mapMatchFt.back().new_found_ft_in_new_image.keypoint.pt);
       obj_points_vector.push_back(mapMatchFt.back().ref_match.match_point_in_marker_frame[0]); 
     }
   }
-
-  /*for(int i = 0; i < matched_points1.size(); i++) {
-    cv::Point2f new_old_pt = matched_points1[i].keypoint.pt;
-    for(auto &m : matches) {
-      if (m.keypoint2.pt == new_old_pt) {
-        mapMatchFt.push_back(MapMatchFt{matched_points1[i], matched_points2[i], m});
-        break;
-      }
+  /*std::sort(mapMatchFt.begin(), mapMatchFt.end());
+  int index = 0;
+  for (auto &m : mapMatchFt) {
+    if (index < 4) {
+      img_points_vector.push_back(m.new_found_ft_in_new_image.keypoint.pt);
+      obj_points_vector.push_back(m.ref_match.match_point_in_marker_frame[0]); 
+    } else if (img_points_vector.size() < 5) {
+      img_points_vector.push_back(m.new_found_ft_in_new_image.keypoint.pt);
+      obj_points_vector.push_back(m.ref_match.match_point_in_marker_frame[0]); 
+    } else if (img_points_vector.size() > 20 && m.accuracy_index > 20) {
+      break;
+    } else {
+      img_points_vector.push_back(m.new_found_ft_in_new_image.keypoint.pt);
+      obj_points_vector.push_back(m.ref_match.match_point_in_marker_frame[0]);
     }
+    index++;
   }*/
-  std::cout << "Founded corr: " << mapMatchFt.size() << std::endl;
-  /*for (int k = 0; k < mapMatchFt.size(); k++) {
-    int counter = 0;
-    int drift = 0;
-    for (int d = 0; d < mapMatchFt[k].new_found_ft_in_new_image.descriptor.cols; d++) {
-      uint old_d = (uint)mapMatchFt[k].new_found_ft.descriptor.at<uchar>(0,d);
-      uint new_d = (uint)mapMatchFt[k].new_found_ft_in_new_image.descriptor.at<uchar>(0,d);
-      if ((int)old_d < (int)(new_d) + 1 && (int)old_d > (int)(new_d) - 1) {
-        counter++;
-        drift += abs((int)old_d - (int)new_d);
-      }
-    }
-    mapMatchFt[k].accuracy_index = counter; // OLD -> if (counter > 20) { img_p... obj_p...}
-  }
-  std::sort(mapMatchFt.begin(), mapMatchFt.end(), std::greater<MapMatchFt>());
-  //measure_chrono(stc, "-> calc_pose_with_matches::close_match time: ");
-  if (mapMatchFt.size() > 10 && mapMatchFt[6].accuracy_index > 20) {
-    for (int i = 0; i < 10; i++) {
-      img_points_vector.push_back(mapMatchFt[i].new_found_ft_in_new_image.keypoint.pt);
-      obj_points_vector.push_back(mapMatchFt[i].ref_match.match_point_in_marker_frame[0]); 
-      //std::cout << mapMatchFt[i].new_found_ft_in_new_image.keypoint.pt << " " << mapMatchFt[i].ref_match.keypoint2.pt  << " " << mapMatchFt[i].new_found_ft.keypoint.pt << std::endl;
-    }
-
-  } else {
-    return cv::Mat(4, 4, CV_64F, double(0));
-  }*/
+  std::cout << "Pose size: " << img_points_vector.size() << std::endl;
+  if (img_points_vector.size() < 6) { return cv::Mat(4, 4, CV_64F, double(0)); }
   pose = estimated_pose(img_points_vector, obj_points_vector);
   measure_chrono(st, "-> calc_pose_with_matches time: ");
   return pose;
 }
-
-
-/* find_closest_match */
-bool 
-Slam::find_closest_match(SingleMatchPoint point_to_search, 
-                         std::vector<Match> reference_matches, 
-                         Match& closest_match) 
-{
-  std::vector<uint> point_to_search_desc;
-  std::vector<int>  eq_val_vec; 
-  int min_index  = 0;
-  int max_eq_val = 0;
-  for (int i = 0; i < point_to_search.descriptor.cols; i++) {
-    point_to_search_desc.push_back((uint)point_to_search.descriptor.at<uchar>(0,i));
-  } 
-  for (auto &ref_m : reference_matches) {
-    std::vector<uint> ref_m_desc;
-    for (int i = 0; i < ref_m.descriptor1.cols; i++) {
-      ref_m_desc.push_back((uint)ref_m.descriptor1.at<uchar>(0,i));
-    }
-    int eq_val = 0;
-    for (int k = 0; k < ref_m_desc.size(); k++) {
-      if (ref_m_desc[k] <= (int)(point_to_search_desc[k] + 2) && ref_m_desc[k] >= (int)(point_to_search_desc[k] - 2)) {
-        eq_val++;
-      }
-    }
-    eq_val_vec.push_back(eq_val);
-  }
-  for (int i = 0; i < eq_val_vec.size(); i++) {
-    if (eq_val_vec[i] > max_eq_val) {
-      min_index = i;
-      max_eq_val = eq_val_vec[i];
-    }
-  }
-  closest_match = reference_matches[min_index];
-  if (max_eq_val < 20) {
-    return false;
-  }
-  return true;  
-}
-
 
 std::vector<cv::KeyPoint> 
 Slam::search_features(cv::Mat image) 
@@ -218,7 +157,7 @@ Slam::search_features(cv::Mat image)
 
 
 cv::Mat 
-Slam::extract_descriptors(cv::Mat image, std::vector<cv::KeyPoint> keypoints) 
+Slam::extract_descriptors(cv::Mat &image, std::vector<cv::KeyPoint> &keypoints) 
 {
   cv::Mat descriptors;
   descriptions_extractor->compute(image, keypoints, descriptors);
@@ -227,7 +166,7 @@ Slam::extract_descriptors(cv::Mat image, std::vector<cv::KeyPoint> keypoints)
 
 
 std::vector<cv::DMatch> 
-Slam::match_features(cv::Mat descriptors1, cv::Mat descriptors2) 
+Slam::match_features(cv::Mat &descriptors1, cv::Mat &descriptors2) 
 {
   std::vector<std::vector<cv::DMatch>> matches;
   std::vector<cv::DMatch> tot_matches;
@@ -374,16 +313,16 @@ Slam::solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv:
         for (int k = 0; k < 2; k++) { MA(i,k) = A.at<double>(i,k); }
         MB(i,0) = B.at<double>(i,0);
     }
-    Eigen::VectorXd x = MA.colPivHouseholderQr().solve(MB);
+    Eigen::VectorXd x = MA.fullPivHouseholderQr().solve(MB);
     double x1 = p11.x + x(0,0) * (p12.x - p11.x);
     double y1 = p11.y + x(0,0) * (p12.y - p11.y);
     double z1 = p11.z + x(0,0) * (p12.z - p11.z);
     double x2 = p21.x + x(1,0) * (p22.x - p21.x);
     double y2 = p21.y + x(1,0) * (p22.y - p21.y);
     double z2 = p21.z + x(1,0) * (p22.z - p21.z);
-    std::vector<double> sol = {x1,y1,z1,x2,y2,z2};
+    std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
     double relative_error = (MA * x - MB).norm() / MB.norm(); 
-    if (relative_error > 0.0005) {
+    if (relative_error > 0.0005) { // 0.0002
       sol[0] = -9999999;
       return sol;
     }
