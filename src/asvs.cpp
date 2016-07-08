@@ -47,6 +47,15 @@ EyesHelper::slam_map(cv::VideoCapture capture, int count, float min_dist) {
           std::vector<Match> tm = slam.map_2_images(image1, m1.marker[0].pose(), image, m2.marker[0].pose(), new_joined_matches);
           image_ready = 0;
           std::cout << "Matched points: " << tm.size() << std::endl;
+          ////////
+          std::vector<MapPoint> mps;
+          for (auto &m : tm) {
+            MapPoint new_mp = MapPoint{m.match_point_in_marker_frame[0], m.coords3d_2, m.keypoint2, m.descriptor2};
+            mps.push_back(new_mp);
+          }
+          map__update(slam.map, mps, m2.marker[0].pose(), image);
+
+          ////////
           total_matches.push_back(tm);
           if (tm.size() < 4) { continue; }
           std::cout << "Real pose: " << m2.marker[0].pose() << std::endl;
@@ -60,6 +69,8 @@ EyesHelper::slam_map(cv::VideoCapture capture, int count, float min_dist) {
       }
     }
   }
+  map__remove_empty_sectors(slam.map);
+  //map__write("map.txt", slam.map, true);
   return total_matches;
 }
 
@@ -84,6 +95,9 @@ EyesHelper::slam_localize(cv::VideoCapture capture_test, int count_test, std::ve
     std::cout << "Real pose: " << m1.marker[0].trVec << std::endl;
     real_poses.push_back(cv::Point3d(m1.marker[0].trVec.at<double>(0,0), m1.marker[0].trVec.at<double>(1,0), m1.marker[0].trVec.at<double>(2,0)));
     cv::Mat estimated_pose = slam.calc_pose_with_matches(image, tot_matches);
+    ///
+    map__sectors_in_view(slam.map, estimated_pose);
+    ///
     std::cout << "Estimated pose: " << estimated_pose << std::endl;
     estimated_poses.push_back(cv::Point3d(estimated_pose.at<double>(0,3), estimated_pose.at<double>(1,3), estimated_pose.at<double>(2,3)));
   }

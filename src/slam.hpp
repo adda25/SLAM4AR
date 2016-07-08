@@ -104,7 +104,10 @@ public:
     descriptions_extractor = new cv::OrbDescriptorExtractor();
     camera = MyCamereParamReader();
     camera.readFromXMLFile(camera_path);
-    slam_map = SlamMap(5, 100);
+    uint a[3] = {5, 5, 1};
+    uint b[3] = {200, 100, 50};
+    map = map__create(a, b);
+    //map__write("map_grid.txt", map, true);
   }
   
   /// TODO
@@ -174,8 +177,8 @@ public:
   cv::Ptr<cv::FeatureDetector> features_detector;
   cv::Ptr<cv::DescriptorExtractor> descriptions_extractor;
   MyCamereParamReader camera;  
-
-  SlamMap slam_map;
+  Map map;
+  //SlamMapBlock slam_map;
 
 private:
   std::vector<double> 
