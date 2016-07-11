@@ -11,21 +11,14 @@ class EyesHelper
 {
 public:
   EyesHelper(std::string cam_path) {
-    slam = Slam(cam_path);
     camera_path = cam_path;
   }
   
-  Slam slam;
   std::string camera_path;
 
   Map slam_c_map(cv::VideoCapture capture, int count, float min_dist);
 
-  void slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map);
-  
-  std::vector<std::vector<Match>> slam_map(cv::VideoCapture capture, int count, float min_dist);
-  
-  void slam_localize(cv::VideoCapture capture_test, int count_test, std::vector<std::vector<Match>> matches);
-  
+  void slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map);  
 };
 
 

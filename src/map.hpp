@@ -11,7 +11,7 @@ typedef struct
   cv::Point3f coords_3D;
   cv::Point3f coords_3D_camera_sys;
   cv::KeyPoint keypoint;
-  cv::Mat descriptor;	
+  cv::Mat descriptor;   
 } MapPoint;
 
 typedef struct 

@@ -20,11 +20,6 @@
 #include "camera_param_reader.hpp"
 #include "map.hpp"
 
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-
 typedef struct 
 {
   cv::OrbFeatureDetector features_detector;
@@ -48,83 +43,6 @@ cv::Mat slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector,
                              cv::vector<cv::Point3f> obj_points_vector, 
                              MyCamereParamReader camera); 
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-typedef struct
-{
-  cv::KeyPoint keypoint;
-  cv::Mat descriptor;
-} SingleMatchPoint;
-
-
-typedef struct 
-{
-  cv::Point3d coords3d;
-  cv::Point3d coords3d_2;
-  cv::Mat reference_pose;
-  cv::Mat reference_pose_2;
-  cv::Point2f coords2d;
-  cv::Point2f coords2d_2;
-  cv::KeyPoint keypoint1;
-  cv::KeyPoint keypoint2;
-  cv::Mat descriptor1;
-  cv::Mat descriptor2;
-  cv::Vec3b colour;
-  cv::vector<cv::Point3f> match_point_in_marker_frame;
-  
-  void 
-  match_position_in_marker_frame(cv::Mat camera_pose) {
-    cv::Mat from_cam_2_match = cv::Mat::eye(4, 4, CV_64F);
-    cv::Mat points = cv::Mat(3, 1, CV_64F);
-    cv::Mat rot = cv::Mat(3, 3, CV_64F);
-    from_cam_2_match.at<double>(0,3) = coords3d.x;
-    from_cam_2_match.at<double>(1,3) = coords3d.y;
-    from_cam_2_match.at<double>(2,3) = coords3d.z;
-    cv::Mat res = camera_pose* from_cam_2_match;
-    cv::Point3f match_in_marker = cv::Point3f(res.at<double>(0,3), res.at<double>(1,3), res.at<double>(2,3));
-    match_point_in_marker_frame.push_back(match_in_marker);
-  }
-      
-  cv::vector<cv::Point2f> 
-  calc_image_point_for_frame(MyCamereParamReader& camera, cv::Mat rvec, cv::Mat tvec) {
-    cv::Mat result(4, 4, CV_64FC1);
-    cv::Mat rot;
-    cv::Rodrigues(rvec, rot);
-    for (int i = 0; i < 3; i++) {
-      for (int k = 0; k < 3; k++) {
-        result.at<double>(i,k) = rot.at<double>(i,k);
-      }
-    }
-    result.at<double>(0,3) = tvec.at<double>(0,0);
-    result.at<double>(1,3) = tvec.at<double>(1,0);
-    result.at<double>(2,3) = tvec.at<double>(2,0);
-    result.at<double>(3,0) = 0;
-    result.at<double>(3,1) = 0;
-    result.at<double>(3,2) = 0;
-    result.at<double>(3,3) = 1;
-    match_position_in_marker_frame(reference_pose.inv());
-    cv::vector<cv::Point2f> image_point_2_return;
-    cv::projectPoints(match_point_in_marker_frame, rvec, tvec, camera.getCameraMatrix(), camera.getDistorsion(), image_point_2_return);
-    return image_point_2_return;
-  }
-} Match;
-
-
-class MapMatchFt 
-{
-public:
-  SingleMatchPoint new_found_ft; 
-  SingleMatchPoint new_found_ft_in_new_image; 
-  Match ref_match;
-  int accuracy_index;
-  bool operator>(MapMatchFt rhs) const { return accuracy_index > rhs.accuracy_index; }
-  bool operator<(MapMatchFt rhs) const { return accuracy_index < rhs.accuracy_index; }
-};
-
 class MapMatchFt_C 
 {
 public:
@@ -132,109 +50,8 @@ public:
   MapPoint new_found_ft_in_new_image; 
   MapPoint ref_match;
   int accuracy_index;
-  bool operator>(MapMatchFt rhs) const { return accuracy_index > rhs.accuracy_index; }
-  bool operator<(MapMatchFt rhs) const { return accuracy_index < rhs.accuracy_index; }
-};
-
-
-class Slam 
-{  
-public:
-  Slam() {};
-  
-  Slam(std::string camera_path) 
-  {
-    features_detector = new cv::OrbFeatureDetector(4000);
-    descriptions_extractor = new cv::OrbDescriptorExtractor();
-    camera = MyCamereParamReader();
-    camera.readFromXMLFile(camera_path);
-    uint a[3] = {5, 5, 1};
-    uint b[3] = {50, 50, 50};
-    map = map__create(a, b);
-    //map__write("map_grid.txt", map, true);
-  }
-  
-  /// TODO
-  std::vector<Match> 
-  map_2_images(cv::Mat image1, 
-               cv::Mat image2, 
-               cv::Mat relative_pose);
-
-  std::vector<Match> 
-  map_2_images(cv::Mat image1, 
-               cv::Mat pose1, 
-               cv::Mat image2, 
-               cv::Mat pose2, 
-               std::vector<Match> old_matches);
-
-  cv::Mat 
-  calc_pose_with_matches(cv::Mat image, std::vector<Match> matches);
-  
-  std::vector<cv::KeyPoint> 
-  search_features(cv::Mat image);
-  
-  cv::Mat 
-  extract_descriptors(cv::Mat &image, std::vector<cv::KeyPoint> &keypoints);
-
-  std::vector<cv::DMatch> 
-  match_features(cv::Mat &descriptors1, cv::Mat &descriptors2);
-                                         
-  void 
-  split_matches(std::vector<cv::DMatch> matches, 
-                std::vector<cv::KeyPoint> keypoints1,
-                cv::Mat descriptors1, 
-                std::vector<cv::KeyPoint> keypoints2, 
-                cv::Mat descriptors2,
-                std::vector<SingleMatchPoint> &match1, 
-                std::vector<SingleMatchPoint> &match2);
-                     
-  std::vector<Match> 
-  triangulate(cv::Mat image1,
-              std::vector<SingleMatchPoint> matched_points1, 
-              cv::Mat pose1, 
-              std::vector<SingleMatchPoint> matched_points2, 
-              cv::Mat pose2);
-                     
-  cv::Mat estimated_pose(std::vector<Match> matches);
-
-  cv::Mat estimated_pose(cv::vector<cv::Point2f> img_points_vector, 
-                         cv::vector<cv::Point3f> obj_points_vector);
-  
-  void 
-  draw_estimated_map(std::vector<Match> matches, 
-                     cv::Mat &image, 
-                     cv::Mat tr_vec, 
-                     cv::Mat rot_vec);
-  
-  void 
-  write_point_cloud(std::string filename, std::vector<Match> matches);
-
-
-  void refine_old_matches();
-
-  std::vector<Match> 
-  join_matches(std::vector<std::vector<Match>> matches);
-  
-  std::vector<Match> 
-  remove_double_matches(std::vector<Match> matches);
-    
-  cv::Ptr<cv::FeatureDetector> features_detector;
-  cv::Ptr<cv::DescriptorExtractor> descriptions_extractor;
-  MyCamereParamReader camera;  
-  Map map;
-  //SlamMapBlock slam_map;
-
-private:
-  std::vector<double> 
-  solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22);
-  
-  bool 
-  check_match_presence(SingleMatchPoint point_to_search, 
-                       SingleMatchPoint point_ref, 
-                       std::vector<Match> reference_matches, 
-                       Match &closest_match);
-
-
+  bool operator>(MapMatchFt_C rhs) const { return accuracy_index > rhs.accuracy_index; }
+  bool operator<(MapMatchFt_C rhs) const { return accuracy_index < rhs.accuracy_index; }
 };
 
 #endif // End __SLAM_HPP

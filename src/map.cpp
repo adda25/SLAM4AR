@@ -50,7 +50,7 @@ check_line_box(cv::Point3f B1, cv::Point3f B2, cv::Point3f L1, cv::Point3f L2, c
     || (get_intersection( L1.x-B2.x, L2.x-B2.x, L1, L2, Hit) && in_box( Hit, B1, B2, 1 )) 
     || (get_intersection( L1.y-B2.y, L2.y-B2.y, L1, L2, Hit) && in_box( Hit, B1, B2, 2 )) 
     || (get_intersection( L1.z-B2.z, L2.z-B2.z, L1, L2, Hit) && in_box( Hit, B1, B2, 3 ))) {
-  	return true;
+    return true;
   }
   return false;
 }
@@ -64,14 +64,14 @@ map__create(uint sectors[3], uint sector_size[3]) {
   int total_half_side_lenght_y = (sectors[1] * sector_size[1]) * 0.5;
   int total_half_side_lenght_z = (sectors[2] * sector_size[2]) * 0.5;
   for (int x = 0; x < sectors[0]; x++) {
-  	for (int y = 0; y < sectors[1]; y++) {
-  	  for (int z = 0; z < sectors[2]; z++) {
-  	  	int xc_pos_m = -total_half_side_lenght_x + sector_size[0] * x;
-  	  	int yc_pos_m = -total_half_side_lenght_y + sector_size[1] * y;
-  	    int zc_pos_m = -total_half_side_lenght_z + sector_size[2] * z;
-  	    int xc_pos_M = -total_half_side_lenght_x + sector_size[0] * x + sector_size[0]; 
-  	  	int yc_pos_M = -total_half_side_lenght_y + sector_size[1] * y + sector_size[1];
-  	    int zc_pos_M = -total_half_side_lenght_z + sector_size[2] * z + sector_size[2];
+    for (int y = 0; y < sectors[1]; y++) {
+      for (int z = 0; z < sectors[2]; z++) {
+        int xc_pos_m = -total_half_side_lenght_x + sector_size[0] * x;
+        int yc_pos_m = -total_half_side_lenght_y + sector_size[1] * y;
+        int zc_pos_m = -total_half_side_lenght_z + sector_size[2] * z;
+        int xc_pos_M = -total_half_side_lenght_x + sector_size[0] * x + sector_size[0]; 
+        int yc_pos_M = -total_half_side_lenght_y + sector_size[1] * y + sector_size[1];
+        int zc_pos_M = -total_half_side_lenght_z + sector_size[2] * z + sector_size[2];
         MapSector sector = MapSector{xc_pos_m, yc_pos_m, zc_pos_m, xc_pos_M, yc_pos_M, zc_pos_M};
         map.push_back(sector);
       }
@@ -82,12 +82,12 @@ map__create(uint sectors[3], uint sector_size[3]) {
 
 void 
 map__update(Map &map, 
-	        std::vector<MapPoint> points, 
-	        const cv::Mat pose, 
-	        const cv::Mat &frame) 
+            std::vector<MapPoint> points, 
+            const cv::Mat pose, 
+            const cv::Mat &frame) 
 {
   for (auto &p : points) {
-  	// Get right sector
+    // Get right sector
     int sector_index = map__sector_for_coords(map, p.coords_3D);
     if (sector_index == -1) {
       sector_index = _map__find_nearest_sector_for_point(map, p.coords_3D);
@@ -109,9 +109,9 @@ void
 map__remove_empty_sectors(Map &map) 
 {
   for (size_t i = 0; i < map.size(); i++) {
-  	if (map[i].sector_points.size() == 0) {
+    if (map[i].sector_points.size() == 0) {
       map.erase(map.begin() + i);
-  	}
+    }
   }
 }
 
@@ -152,13 +152,13 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
   cv::Mat cam_c = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640, 360, 0));
   cv::Point3f cam_center = cv::Point3f(cam_c.at<double>(0, 0), cam_c.at<double>(1, 0), cam_c.at<double>(2, 0));
   for (auto &sector : map) {
-  	if (sector.sector_points.size() == 0) {continue;}
-  	cv::Point3f hit;
-  	box_center = _box_center_from_bounds(sector.sector_bounds); // sector.sector_points[0].coords_3D_camera_sys;
+    if (sector.sector_points.size() == 0) {continue;}
+    cv::Point3f hit;
+    box_center = _box_center_from_bounds(sector.sector_bounds); // sector.sector_points[0].coords_3D_camera_sys;
     int inside_e = check_line_box(box_e[0], box_e[1], box_center, cam_center, hit);
     //int inside_i = check_line_box(box_i[0], box_i[1], box_center, cam_center, hit);
     if (inside_e == 1) {
-    	partial_map.push_back(sector);
+        partial_map.push_back(sector);
     }
     //std::cout << inside_e << " " << " " << box_e[0] << " " << box_e[1] << " cam_center: " << cam_center << " box_center: " << box_center <<  std::endl;
   }
@@ -170,9 +170,9 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
       ofs << g.x << " " << g.y << " " << g.z << " " << 255 << " " << 0 << " " << 0 << "\n";   
     }
     for (auto &s : map) {
-  	  for (auto &p : s.sector_points) {
-  	    ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << 0 << " " << 255 << " " << 0 << "\n";
-  	  }
+      for (auto &p : s.sector_points) {
+        ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << 0 << " " << 255 << " " << 0 << "\n";
+      }
     }
     ofs << cam_center.x << " " << cam_center.y << " " << cam_center.z << " " << 0 << " " << 0 << " " << 255 << "\n";
     ofs << box_e[0].x << " " << box_e[0].y << " " << box_e[0].z << " " << 0 << " " << 0 << " " << 255 << "\n";
@@ -185,9 +185,9 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
     ofs.close();
     first = false;
   } else {
-  	std::ofstream ofs;
+    std::ofstream ofs;
     ofs.open ("test_map.txt", std::ofstream::out | std::ofstream::app);
-  	ofs << cam_center.x << " " << cam_center.y << " " << cam_center.z << " " << 0 << " " << 0 << " " << 255 << "\n";
+    ofs << cam_center.x << " " << cam_center.y << " " << cam_center.z << " " << 0 << " " << 0 << " " << 255 << "\n";
     ofs << box_e[0].x << " " << box_e[0].y << " " << box_e[0].z << " " << 0 << " " << 0 << " " << 255 << "\n";
     ofs << box_e[1].x << " " << box_e[1].y << " " << box_e[1].z << " " << 0 << " " << 0 << " " << 255 << "\n";
     for (auto &sector : map) {
@@ -198,7 +198,7 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
   }*/
   std::cout << "partial_map: " << partial_map.size() << std::endl;
   if (partial_map.size() == 0) {
-  	return map;
+    return map;
   }
   return partial_map;
 }
@@ -219,9 +219,9 @@ map__write(std::string filename, const Map &map_to_write, bool write_grid) {
     }
   }
   for (auto &s : map_to_write) {
-  	for (auto &p : s.sector_points) {
-  		ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << 0 << " " << 255 << " " << 0 << "\n";
-  	}
+    for (auto &p : s.sector_points) {
+        ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << 0 << " " << 255 << " " << 0 << "\n";
+    }
   }
   ofs.close();
 }
@@ -235,8 +235,8 @@ _map__grid(const Map &map)
 {
   std::vector<cv::Point3f> grid;
   for (auto &s : map) {
-  	// X
-  	cv::Point3f psx1 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[2]);
+    // X
+    cv::Point3f psx1 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[2]);
     cv::Point3f psx2 = cv::Point3f(s.sector_bounds[3], s.sector_bounds[1], s.sector_bounds[2]);
     std::vector<cv::Point3f> lx1 = _line(psx1, psx2);
     grid.insert(grid.end(), lx1.begin(), lx1.end());
@@ -257,7 +257,7 @@ _map__grid(const Map &map)
     grid.insert(grid.end(), lx4.begin(), lx4.end());
 
     // Y
-  	cv::Point3f psy1 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[2]);
+    cv::Point3f psy1 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[2]);
     cv::Point3f psy2 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[4], s.sector_bounds[2]);
     std::vector<cv::Point3f> ly1 = _line(psy1, psy2);
     grid.insert(grid.end(), ly1.begin(), ly1.end());
@@ -278,7 +278,7 @@ _map__grid(const Map &map)
     grid.insert(grid.end(), ly4.begin(), ly4.end());
 
     // Y
-  	cv::Point3f psz1 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[2]);
+    cv::Point3f psz1 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[2]);
     cv::Point3f psz2 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[5]);
     std::vector<cv::Point3f> lz1 = _line(psz1, psz2);
     grid.insert(grid.end(), lz1.begin(), lz1.end());
@@ -311,10 +311,10 @@ _line(cv::Point3f min_coords, cv::Point3f max_coords)
   float y_steps = fabs(min_coords.y - max_coords.y) / dt;
   float z_steps = fabs(min_coords.z - max_coords.z) / dt;
   for (int i = 0; i < dt; i++) {
-  	cv::Point3f p = cv::Point3f(min_coords.x + x_steps * i, 
-  		                        min_coords.y + y_steps * i,
-  		                        min_coords.z + z_steps * i);
-  	line.push_back(p);
+    cv::Point3f p = cv::Point3f(min_coords.x + x_steps * i, 
+                                min_coords.y + y_steps * i,
+                                min_coords.z + z_steps * i);
+    line.push_back(p);
   }
   return line;
 }
@@ -323,11 +323,11 @@ bool
 _is_coord_inside_box(cv::Point3f coord, const int box_bounds[6]) 
 {
   return (coord.x < box_bounds[3] && 
-  	      coord.x > box_bounds[0] &&
-  	      coord.y < box_bounds[4] &&
-  	      coord.y > box_bounds[1] &&
-  	      coord.z < box_bounds[5] &&
-  	      coord.z > box_bounds[2]);
+          coord.x > box_bounds[0] &&
+          coord.y < box_bounds[4] &&
+          coord.y > box_bounds[1] &&
+          coord.z < box_bounds[5] &&
+          coord.z > box_bounds[2]);
 }
 
 int 
@@ -341,8 +341,8 @@ _map__find_nearest_sector_for_point(const Map &map, cv::Point3f coord)
     float d_z = float(map[i].sector_bounds[5] + map[i].sector_bounds[2]) * 0.5f - coord.z;
     float distance = sqrt(pow(d_x, 2) + pow(d_y, 2) + pow(d_z, 2));
     if (distance < min_dist) {
-    	min_dist = distance;
-    	min_index = i;
+        min_dist = distance;
+        min_index = i;
     }
   }
   return min_index;
@@ -363,35 +363,35 @@ _map__create_sector(const int reference_sector_bounds[6], cv::Point3f coord)
   bool outside = true;
   int counter[3] = {0, 0, 0};
   while (outside) {
-  	int matchs = 0;
-  	if (coord.x < c_x + s_x * 0.5 + s_x * counter[0] * x_dir && 
-  		coord.x > c_x - s_x * 0.5 + s_x * counter[0] * x_dir) {
+    int matchs = 0;
+    if (coord.x < c_x + s_x * 0.5 + s_x * counter[0] * x_dir && 
+        coord.x > c_x - s_x * 0.5 + s_x * counter[0] * x_dir) {
       matchs++;
-  	} else {
-  	    counter[0]++;
-  	}
-  	if (coord.y < c_y + s_y * 0.5 + s_y * counter[1] * y_dir && 
-  		coord.y > c_y - s_y * 0.5 + s_y * counter[1] * y_dir) {
+    } else {
+        counter[0]++;
+    }
+    if (coord.y < c_y + s_y * 0.5 + s_y * counter[1] * y_dir && 
+        coord.y > c_y - s_y * 0.5 + s_y * counter[1] * y_dir) {
       matchs++;
-  	} else {
+    } else {
         counter[1]++;
-  	}
-  	if (coord.z < c_z + s_z * 0.5 + s_z * counter[2] * z_dir && 
-  		coord.z > c_z - s_z * 0.5 + s_z * counter[2] * z_dir) {
+    }
+    if (coord.z < c_z + s_z * 0.5 + s_z * counter[2] * z_dir && 
+        coord.z > c_z - s_z * 0.5 + s_z * counter[2] * z_dir) {
       matchs++;
-  	} else {
-  		counter[2]++;
-  	}
-  	if (matchs == 3) {
-  		outside = false;
-  	}
+    } else {
+        counter[2]++;
+    }
+    if (matchs == 3) {
+        outside = false;
+    }
   }
   return MapSector{(int)(c_x - s_x * 0.5 + s_x * counter[0] * x_dir), 
-  	               (int)(c_y - s_y * 0.5 + s_y * counter[1] * y_dir),
-  	               (int)(c_z - s_z * 0.5 + s_z * counter[2] * z_dir),
-  	               (int)(c_x + s_x * 0.5 + s_x * counter[0] * x_dir),
-  	               (int)(c_y + s_y * 0.5 + s_y * counter[1] * y_dir),
-  	               (int)(c_z + s_z * 0.5 + s_z * counter[2] * z_dir)};
+                   (int)(c_y - s_y * 0.5 + s_y * counter[1] * y_dir),
+                   (int)(c_z - s_z * 0.5 + s_z * counter[2] * z_dir),
+                   (int)(c_x + s_x * 0.5 + s_x * counter[0] * x_dir),
+                   (int)(c_y + s_y * 0.5 + s_y * counter[1] * y_dir),
+                   (int)(c_z + s_z * 0.5 + s_z * counter[2] * z_dir)};
 }
 
 cv::Mat
