@@ -129,36 +129,77 @@ map__sector_for_coords(Map &map, cv::Point3f coords_3D)
 /* Returns the partial map in the
 camera frustum */
 Map 
-map__sectors_in_view(const Map &map, cv::Mat estimated_camera_pose) 
+map__sectors_in_view(const Map &map, cv::Mat camera_pose) 
 {
-  //estimated_camera_pose = estimated_camera_pose.inv();
+  cv::Mat estimated_camera_pose;
+  camera_pose.copyTo(estimated_camera_pose);
+  estimated_camera_pose = estimated_camera_pose.inv();
+  static bool first = true;
   Map partial_map;
   cv::Point3f box_e[2];
   cv::Point3f box_i[2];
   // Get 2 camera "box"
   cv::Mat be0 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(-640, 360, 50));
   cv::Mat be1 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640,  -360, 55));
-  cv::Mat bi0 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(-640, 360, 3.0));
-  cv::Mat bi1 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640,  -360, 5.0));
+  //cv::Mat bi0 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(-640, 360, 3.0));
+  //cv::Mat bi1 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640,  -360, 5.0));
   box_e[0] = cv::Point3f(be0.at<double>(0, 0), be0.at<double>(1, 0), be0.at<double>(2, 0));
   box_e[1] = cv::Point3f(be1.at<double>(0, 0), be1.at<double>(1, 0), be1.at<double>(2, 0));
-  box_i[0] = cv::Point3f(bi0.at<double>(0, 0), bi0.at<double>(1, 0), bi0.at<double>(2, 0));
-  box_i[1] = cv::Point3f(bi1.at<double>(0, 0), bi1.at<double>(1, 0), bi1.at<double>(2, 0));
+  //box_i[0] = cv::Point3f(bi0.at<double>(0, 0), bi0.at<double>(1, 0), bi0.at<double>(2, 0));
+  //box_i[1] = cv::Point3f(bi1.at<double>(0, 0), bi1.at<double>(1, 0), bi1.at<double>(2, 0));
   // Get camera center
+  cv::Point3f box_center;
   cv::Mat cam_c = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640, 360, 0));
   cv::Point3f cam_center = cv::Point3f(cam_c.at<double>(0, 0), cam_c.at<double>(1, 0), cam_c.at<double>(2, 0));
   for (auto &sector : map) {
   	if (sector.sector_points.size() == 0) {continue;}
   	cv::Point3f hit;
-  	cv::Point3f box_center = _box_center_from_bounds(sector.sector_bounds); // sector.sector_points[0].coords_3D_camera_sys;
+  	box_center = _box_center_from_bounds(sector.sector_bounds); // sector.sector_points[0].coords_3D_camera_sys;
     int inside_e = check_line_box(box_e[0], box_e[1], box_center, cam_center, hit);
-    int inside_i = check_line_box(box_i[0], box_i[1], box_center, cam_center, hit);
-    if (inside_e == 1 && inside_i == 1) {
+    //int inside_i = check_line_box(box_i[0], box_i[1], box_center, cam_center, hit);
+    if (inside_e == 1) {
     	partial_map.push_back(sector);
     }
-    //std::cout << inside_e << " " << inside_i << " " << box_e[0] << " " << box_e[1] << " cam_center: " << cam_center << " box_center: " << box_center <<  std::endl;
+    //std::cout << inside_e << " " << " " << box_e[0] << " " << box_e[1] << " cam_center: " << cam_center << " box_center: " << box_center <<  std::endl;
   }
+  /* if (first) { 
+    std::ofstream ofs;
+    ofs.open ("test_map.txt", std::ofstream::out | std::ofstream::app);
+    std::vector<cv::Point3f> grid = _map__grid(map);
+    for (auto &g : grid) {
+      ofs << g.x << " " << g.y << " " << g.z << " " << 255 << " " << 0 << " " << 0 << "\n";   
+    }
+    for (auto &s : map) {
+  	  for (auto &p : s.sector_points) {
+  	    ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << 0 << " " << 255 << " " << 0 << "\n";
+  	  }
+    }
+    ofs << cam_center.x << " " << cam_center.y << " " << cam_center.z << " " << 0 << " " << 0 << " " << 255 << "\n";
+    ofs << box_e[0].x << " " << box_e[0].y << " " << box_e[0].z << " " << 0 << " " << 0 << " " << 255 << "\n";
+    ofs << box_e[1].x << " " << box_e[1].y << " " << box_e[1].z << " " << 0 << " " << 0 << " " << 255 << "\n";
+    for (auto &sector : map) {
+      box_center = _box_center_from_bounds(sector.sector_bounds);
+      ofs << box_center.x << " " << box_center.y << " " << box_center.z << " " << 0 << " " << 255 << " " << 255 << "\n";
+    }
+
+    ofs.close();
+    first = false;
+  } else {
+  	std::ofstream ofs;
+    ofs.open ("test_map.txt", std::ofstream::out | std::ofstream::app);
+  	ofs << cam_center.x << " " << cam_center.y << " " << cam_center.z << " " << 0 << " " << 0 << " " << 255 << "\n";
+    ofs << box_e[0].x << " " << box_e[0].y << " " << box_e[0].z << " " << 0 << " " << 0 << " " << 255 << "\n";
+    ofs << box_e[1].x << " " << box_e[1].y << " " << box_e[1].z << " " << 0 << " " << 0 << " " << 255 << "\n";
+    for (auto &sector : map) {
+      box_center = _box_center_from_bounds(sector.sector_bounds);
+      ofs << box_center.x << " " << box_center.y << " " << box_center.z << " " << 0 << " " << 255 << " " << 255 << "\n";
+    }
+    ofs.close();
+  }*/
   std::cout << "partial_map: " << partial_map.size() << std::endl;
+  if (partial_map.size() == 0) {
+  	return map;
+  }
   return partial_map;
 }
 

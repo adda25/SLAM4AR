@@ -17,6 +17,10 @@ public:
   
   Slam slam;
   std::string camera_path;
+
+  Map slam_c_map(cv::VideoCapture capture, int count, float min_dist);
+
+  void slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map);
   
   std::vector<std::vector<Match>> slam_map(cv::VideoCapture capture, int count, float min_dist);
   

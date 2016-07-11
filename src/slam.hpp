@@ -21,6 +21,39 @@
 #include "map.hpp"
 
 
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+
+typedef struct 
+{
+  cv::OrbFeatureDetector features_detector;
+  cv::OrbDescriptorExtractor descriptions_extractor;
+  MyCamereParamReader camera;  
+} SlamSystem;
+
+
+void slam__init(SlamSystem &slam_sys, const std::string camera_path);
+
+std::vector<MapPoint> slam__map(const SlamSystem &slam_sys, 
+                                cv::Mat &image_1, 
+                                cv::Mat &image_2, 
+                                const cv::Mat &pose_1, 
+                                const cv::Mat &pose_2);
+
+cv::Mat slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image);
+
+cv::Mat slam__estimated_pose(std::vector<MapPoint> matches, MyCamereParamReader camera); 
+cv::Mat slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector, 
+                             cv::vector<cv::Point3f> obj_points_vector, 
+                             MyCamereParamReader camera); 
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 typedef struct
 {
   cv::KeyPoint keypoint;
@@ -92,6 +125,17 @@ public:
   bool operator<(MapMatchFt rhs) const { return accuracy_index < rhs.accuracy_index; }
 };
 
+class MapMatchFt_C 
+{
+public:
+  MapPoint new_found_ft; 
+  MapPoint new_found_ft_in_new_image; 
+  MapPoint ref_match;
+  int accuracy_index;
+  bool operator>(MapMatchFt rhs) const { return accuracy_index > rhs.accuracy_index; }
+  bool operator<(MapMatchFt rhs) const { return accuracy_index < rhs.accuracy_index; }
+};
+
 
 class Slam 
 {  
@@ -105,7 +149,7 @@ public:
     camera = MyCamereParamReader();
     camera.readFromXMLFile(camera_path);
     uint a[3] = {5, 5, 1};
-    uint b[3] = {200, 100, 50};
+    uint b[3] = {50, 50, 50};
     map = map__create(a, b);
     //map__write("map_grid.txt", map, true);
   }

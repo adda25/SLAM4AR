@@ -37,8 +37,8 @@ void map__remove_empty_sectors(Map &map);
 int map__sector_for_coords(Map &map, cv::Point3f coords_3D);
 
 /* Returns the partial map that the
-camara is viewing */
-Map map__sectors_in_view(const Map &map, cv::Mat estimated_camera_pose);
+camera is viewing */
+Map map__sectors_in_view(const Map &map, cv::Mat camera_pose);
 
 void map__draw(cv::Mat &frame_to_draw, const Map &map_to_draw, bool draw_grid = false);
 void map__write(std::string filename, const Map &map_to_write, bool write_grid = false);
