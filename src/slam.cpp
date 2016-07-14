@@ -74,23 +74,27 @@ void _slam__split_matches(std::vector<cv::DMatch> matches,
                           cv::Mat descriptors2, 
                           std::vector<MapPoint> &matched_points1, 
                           std::vector<MapPoint> &matched_points2);
-std::vector<MapPoint>     _slam__triangulate(cv::Mat image_1, 
-                                       std::vector<MapPoint> matched_points1, 
-                                       cv::Mat pose1, 
-                                       std::vector<MapPoint> matched_points2, 
-                                       cv::Mat pose2);
+std::vector<MapPoint> _slam__triangulate(cv::Mat image_1, 
+                                         std::vector<MapPoint> matched_points1, 
+                                         cv::Mat pose1, 
+                                         std::vector<MapPoint> matched_points2, 
+                                         cv::Mat pose2);
 std::vector<double> _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22); 
 cv::Point3f match_position_in_marker_frame(cv::Mat camera_pose, cv::Point3d p_solution);
 cv::Mat _slam__estimated_pose(std::vector<MapPoint> matches); 
 cv::Mat _slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector, cv::vector<cv::Point3f> obj_points_vector); 
+std::vector<MapMatchFt_C> _slam__find_p2p_correspondence(const Map &map, const std::vector<MapPoint> &mp1, const std::vector<MapPoint> &mp2);
+void  _slam__good_data_for_solvePnp(std::vector<MapMatchFt_C> &mapMatchFt,
+                                    cv::vector<cv::Point2f> &img_points_vector,
+                                    cv::vector<cv::Point3f> &obj_points_vector);
 //////
 
 
 void 
 slam__init(SlamSystem &slam_sys, const std::string camera_path) 
 {
-  slam_sys.features_detector = cv::OrbFeatureDetector(4000);
-  slam_sys.descriptions_extractor = cv::OrbDescriptorExtractor();
+  slam_sys.features_detector = new cv::OrbFeatureDetector(8000);
+  slam_sys.descriptions_extractor = new cv::OrbDescriptorExtractor();
   slam_sys.camera = MyCamereParamReader();
   slam_sys.camera.readFromXMLFile(camera_path);
 }
@@ -131,31 +135,12 @@ slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
   std::vector<MapMatchFt_C> mapMatchFt;
   keypoints = _slam__search_features(slam_sys, image);
   descriptors = _slam__extract_descriptors(slam_sys, image, keypoints);
-  for (auto &m : map) { 
-    for (auto &s : m.sector_points) {
-      old_descriptors.push_back(s.descriptor); 
-      old_keypoints.push_back(s.keypoint); 
-    }
-  }
+  map__merge_keypoints_and_descriptors(map, old_keypoints, old_descriptors);
   new_matches = _slam__match_features(old_descriptors, descriptors);
   std::cout << " Match after: " << new_matches.size() << std::endl;
   _slam__split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
-  for (int i = 0; i < matched_points1.size(); i++) {
-    std::vector<cv::DMatch> m = _slam__match_features(matched_points1[i].descriptor, matched_points2[i].descriptor);
-    cv::Point2f new_old_pt = matched_points1[i].keypoint.pt;
-    for (auto &mm : map) { 
-      for (auto &s : mm.sector_points) {
-        if (s.keypoint.pt == new_old_pt) {
-          mapMatchFt.push_back(MapMatchFt_C{matched_points1[i], matched_points2[i], s, (int)m[0].distance});
-          break;
-        }
-      }
-    }
-    if (mapMatchFt.back().accuracy_index < 20) {
-      img_points_vector.push_back(mapMatchFt.back().new_found_ft_in_new_image.keypoint.pt);
-      obj_points_vector.push_back(mapMatchFt.back().ref_match.coords_3D); 
-    }
-  }
+  mapMatchFt = _slam__find_p2p_correspondence(map, matched_points1, matched_points2);
+  _slam__good_data_for_solvePnp(mapMatchFt, img_points_vector, obj_points_vector);
   std::cout << "Pose size: " << img_points_vector.size() << std::endl;
   if (img_points_vector.size() < 6) { return cv::Mat(4, 4, CV_64F, double(0)); }
   pose = slam__estimated_pose(img_points_vector, obj_points_vector, slam_sys.camera);
@@ -163,11 +148,26 @@ slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
   return pose;
 }
 
+void 
+_slam__good_data_for_solvePnp(std::vector<MapMatchFt_C> &mapMatchFt,
+                              cv::vector<cv::Point2f>   &img_points_vector,
+                              cv::vector<cv::Point3f>   &obj_points_vector)
+{
+  int i = 0; 
+  std::sort(mapMatchFt.begin(), mapMatchFt.end());
+  while (true) {
+    if (mapMatchFt[i].accuracy_index > 20 || img_points_vector.size() > 10) { break; }
+    img_points_vector.push_back(mapMatchFt[i].new_found_ft_in_new_image.keypoint.pt);
+    obj_points_vector.push_back(mapMatchFt[i].ref_match.coords_3D); 
+    i++;
+  }
+}
+
 std::vector<cv::KeyPoint> 
 _slam__search_features(const SlamSystem &slam_sys, cv::Mat image)
 {
   std::vector<cv::KeyPoint> keypoints;
-  slam_sys.features_detector.detect(image, keypoints);
+  slam_sys.features_detector->detect(image, keypoints);
   return keypoints;
 }
 
@@ -177,7 +177,7 @@ _slam__extract_descriptors(const SlamSystem &slam_sys,
                            std::vector<cv::KeyPoint> keypoint)
 {
   cv::Mat descriptors;
-  slam_sys.descriptions_extractor.compute(image, keypoint, descriptors);
+  slam_sys.descriptions_extractor->compute(image, keypoint, descriptors);
   return descriptors;
 }
 
@@ -280,6 +280,28 @@ _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv
     return sol;
 }
 
+std::vector<MapMatchFt_C>
+_slam__find_p2p_correspondence(const Map &map, const std::vector<MapPoint> &mp1, const std::vector<MapPoint> &mp2)
+{
+  std::vector<MapMatchFt_C> mapMatchFt;
+  for (int i = 0; i < mp1.size(); i++) {
+    bool found = false;
+    std::vector<cv::DMatch> m = _slam__match_features(mp1[i].descriptor, mp2[i].descriptor);
+    cv::Point2f new_old_pt = mp1[i].keypoint.pt;
+    for (auto &mm : map) { 
+      if (found) { break; }
+      for (auto &s : mm.sector_points) {
+        if (s.keypoint.pt == new_old_pt) {
+          mapMatchFt.push_back(MapMatchFt_C{mp1[i], mp2[i], s, (int)m[0].distance});
+          found = true;
+          break;
+        }
+      }
+    }
+  }
+  return mapMatchFt;
+}
+
 cv::Point3f
 match_position_in_marker_frame(cv::Mat camera_pose, cv::Point3d p_solution) {
   cv::Mat from_cam_2_match = cv::Mat::eye(4, 4, CV_64F);
@@ -334,31 +356,3 @@ slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector,
   return pose;
 }
 
-
-
-/*for (int i = 0; i < matched_points2.size(); i++) {
-  Match ref_match;
-  bool already_match = find_closest_match(matched_points2[i], old_matches, ref_match);
-  if (already_match) {
-    matched_points2.erase(matched_points2.begin() + i);
-    matched_points1.erase(matched_points1.begin() + i);
-  }
-}*/
-
-    ///////////////////////////////////////////
-  ///////////////////////////////////////////
-  /*
-  std::chrono::high_resolution_clock::time_point stc = get_chrono();
-  for (int k = 0; k < matched_points2.size(); k++) {
-    Match closest_match;
-    bool close_enough = find_closest_match(matched_points2[k], matches, closest_match);
-    if (!close_enough) { continue; }
-    img_points_vector.push_back(matched_points2[k].keypoint.pt);
-    obj_points_vector.push_back(closest_match.match_point_in_marker_frame[0]);
-  }*
-  measure_chrono(stc, "-> calc_pose_with_matches::close_match time: ");*/
-  /*std::cout << "obj_points: " << obj_points_vector.size() << std::endl;
-  if (img_points_vector.size() != obj_points_vector.size() || obj_points_vector.size() < 6) {
-    return cv::Mat(4, 4, CV_64F, double(0));
-  }*/
-  // pose = estimated_pose(final_mathes);

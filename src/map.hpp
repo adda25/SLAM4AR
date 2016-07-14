@@ -41,9 +41,20 @@ camera is viewing */
 Map map__sectors_in_view(const Map &map, cv::Mat camera_pose);
 
 void map__draw(cv::Mat &frame_to_draw, const Map &map_to_draw, bool draw_grid = false);
+
+/* Write in the file the coords
+of the map points. If write_grid is true,
+the function also write the map grid.
+*/
 void map__write(std::string filename, const Map &map_to_write, bool write_grid = false);
 
-
+/* Fills the keypoint vector and
+the descriptor Mat with the keypoints and descriptors
+of all sectors of the map.
+*/
+void map__merge_keypoints_and_descriptors(const Map &map, 
+                                          std::vector<cv::KeyPoint> &keypoints_out, 
+                                          cv::Mat &descriptors_out);
 
 
 #endif // End __MAP_HPP__

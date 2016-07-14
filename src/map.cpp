@@ -226,6 +226,20 @@ map__write(std::string filename, const Map &map_to_write, bool write_grid) {
   ofs.close();
 }
 
+void 
+map__merge_keypoints_and_descriptors(const Map &map, 
+                                     std::vector<cv::KeyPoint> &keypoints_out, 
+                                     cv::Mat &descriptors_out)
+{
+  for (auto &m : map) { 
+    for (auto &s : m.sector_points) {
+      descriptors_out.push_back(s.descriptor); 
+      keypoints_out.push_back(s.keypoint); 
+    }
+  }
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////

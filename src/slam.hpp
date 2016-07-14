@@ -22,8 +22,8 @@
 
 typedef struct 
 {
-  cv::OrbFeatureDetector features_detector;
-  cv::OrbDescriptorExtractor descriptions_extractor;
+  cv::FeatureDetector *features_detector;
+  cv::DescriptorExtractor *descriptions_extractor;
   MyCamereParamReader camera;  
 } SlamSystem;
 

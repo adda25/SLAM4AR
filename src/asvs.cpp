@@ -91,7 +91,7 @@ EyesHelper::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map m
   ofs.open ("poses.csv", std::ofstream::out | std::ofstream::app);
   ofs << "r_x, " << "r_y, " << "r_z, " << "e_x, " << "e_y, " << "e_z, " << "\n";
   for (int i = 0; i < real_poses.size(); i++) {
-    if (estimated_poses[i].z <= 0) { 
+    if (estimated_poses[i].z <= 0 || fabs(estimated_poses[i].z - real_poses[i].z) > 20) { 
       continue; 
     }
     ofs << real_poses[i].x << "," << real_poses[i].y << "," << real_poses[i].z << "," 
