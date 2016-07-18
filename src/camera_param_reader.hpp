@@ -1,12 +1,3 @@
-//     _    ____ _____           _
-//    / \  |  _ \_   _|__   ___ | |
-//   / _ \ | |_) || |/ _ \ / _ \| |
-//  / ___ \|  _ < | | (_) | (_) | |
-// /_/   \_\_| \_\|_|\___/ \___/|_|
-// Augmented Reality for Manufacturing
-//
-//  cameraParamReader.h
-//  testMarker
 //
 //  Created by Amedeo on 13/07/15.
 //  Copyright (c) 2015 Amedeo. All rights reserved.

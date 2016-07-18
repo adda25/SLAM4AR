@@ -8,6 +8,7 @@ int _map__find_nearest_sector_for_point(const Map &map, cv::Point3f coord);
 MapSector _map__create_sector(const int reference_sector_bounds[6], cv::Point3f coord);
 cv::Mat _cam_point_from_pixel(cv::Point3f point); 
 cv::Point3f _box_center_from_bounds(const int bounds[6]);
+bool _map__similar_point_in_sector(MapPoint point, MapSector &sector);
 
 int inline 
 get_intersection(float fDst1, float fDst2, cv::Point3f P1, cv::Point3f P2, cv::Point3f &Hit) 
@@ -99,10 +100,45 @@ map__update(Map &map,
       continue;
     }
     // Update sector
+    //if (_map__similar_point_in_sector(p, map[sector_index])) { continue; }
     map[sector_index].sector_points.push_back(p);
     map[sector_index].sector_poses.push_back(pose);
     map[sector_index].sector_frames.push_back(frame);
   }
+}
+
+std::vector<cv::DMatch> 
+_map__match_features(cv::Mat descriptors_1, cv::Mat descriptors_2) 
+{
+  std::vector<std::vector<cv::DMatch>> matches;
+  std::vector<cv::DMatch> tot_matches;
+  size_t t_size = 0;
+  cv::BFMatcher matcher = cv::BFMatcher(cv::NORM_HAMMING2, true);
+  matcher.knnMatch(descriptors_1, descriptors_2, matches, 1);
+  for (auto &m : matches) { t_size += m.size(); }
+  tot_matches.reserve(t_size);
+  for (auto &m : matches) { tot_matches.insert(tot_matches.end(), m.begin(), m.end()); }
+  return tot_matches;  
+}
+
+bool 
+_map__similar_point_in_sector(MapPoint point, MapSector &sector)
+{
+  for (auto &p : sector.sector_points) {
+    double distance = sqrt(pow(point.coords_3D.x - p.coords_3D.x, 2) + 
+                           pow(point.coords_3D.y - p.coords_3D.y, 2) + 
+                           pow(point.coords_3D.z - p.coords_3D.z, 2));
+    //std::vector<cv::DMatch>  dm = _map__match_features(point.descriptor, p.descriptor);
+    if (distance < 3) {
+        std::cout << "--> Refining " << p.coords_3D << " " << point.coords_3D << std::endl;
+        p.coords_3D.x = (p.coords_3D.x + point.coords_3D.x) * 0.5;
+        p.coords_3D.x = (p.coords_3D.y + point.coords_3D.y) * 0.5;
+        p.coords_3D.x = (p.coords_3D.z + point.coords_3D.z) * 0.5;
+        p.hits++;
+        return true;
+    }
+  }
+  return false;
 }
 
 void 
@@ -239,6 +275,38 @@ map__merge_keypoints_and_descriptors(const Map &map,
   }
 }
 
+void 
+map__merge(const Map &map, std::vector<MapPoint> &me_map)
+{
+  for (auto &m : map) { 
+    for (auto &s : m.sector_points) {
+      MapPoint mp = s;
+      me_map.push_back(mp);
+    }
+  }
+}
+
+void 
+map__image_points_for_pose(const Map &map, 
+                           cv::Mat current_tr,
+                           cv::Mat current_rot, 
+                           cv::Mat camera_matrix,
+                           cv::Mat camera_distorsion,
+                           std::vector<MapPoint> &image_points_out)
+{ 
+  for (auto &m : map) {
+    for (auto &p : m.sector_points) {
+      cv::vector<cv::Point2f> im_pt;
+      cv::vector<cv::Point3f> p_vec;
+      MapPoint nmp = p;
+      p_vec.push_back(p.coords_3D);
+      cv::projectPoints(p_vec, current_rot, current_tr, 
+                        camera_matrix, camera_distorsion, im_pt);
+      nmp.point_pixel_pos = im_pt[0];
+      image_points_out.push_back(nmp);
+    }
+  }  
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -291,7 +359,7 @@ _map__grid(const Map &map)
     std::vector<cv::Point3f> ly4 = _line(psy7, psy8);
     grid.insert(grid.end(), ly4.begin(), ly4.end());
 
-    // Y
+    // Z
     cv::Point3f psz1 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[2]);
     cv::Point3f psz2 = cv::Point3f(s.sector_bounds[0], s.sector_bounds[1], s.sector_bounds[5]);
     std::vector<cv::Point3f> lz1 = _line(psz1, psz2);

@@ -47,6 +47,7 @@ EyesHelper::slam_c_map(cv::VideoCapture capture, int count, float min_dist)
           map__update(slam_map, mps, m2.marker[0].pose(), image);
           if (mps.size() < 4) { continue; }
           std::cout << "Real pose: " << m2.marker[0].pose() << std::endl;
+           
           cv::Mat estimated_pose = slam__estimated_pose(mps, slam_sys.camera);
           std::cout << "Estimated pose: " << estimated_pose << std::endl;
         }

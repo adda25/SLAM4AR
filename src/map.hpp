@@ -12,6 +12,8 @@ typedef struct
   cv::Point3f coords_3D_camera_sys;
   cv::KeyPoint keypoint;
   cv::Mat descriptor;   
+  uint hits = 0;
+  cv::Point2f point_pixel_pos;
 } MapPoint;
 
 typedef struct 
@@ -28,17 +30,17 @@ typedef std::vector<MapSector> Map;
 /*  sectors[3] = [n_x, n_y, n_z]
 sector_size[3] = [s_x, s_y, s_z] 
 */
-Map map__create(uint sectors[3], uint sector_size[3]);
+Map  map__create(uint sectors[3], uint sector_size[3]);
 
 void map__update(Map &map, std::vector<MapPoint> points, const cv::Mat pose, const cv::Mat &frame);
 
 void map__remove_empty_sectors(Map &map);
 
-int map__sector_for_coords(Map &map, cv::Point3f coords_3D);
+int  map__sector_for_coords(Map &map, cv::Point3f coords_3D);
 
 /* Returns the partial map that the
 camera is viewing */
-Map map__sectors_in_view(const Map &map, cv::Mat camera_pose);
+Map  map__sectors_in_view(const Map &map, cv::Mat camera_pose);
 
 void map__draw(cv::Mat &frame_to_draw, const Map &map_to_draw, bool draw_grid = false);
 
@@ -55,6 +57,15 @@ of all sectors of the map.
 void map__merge_keypoints_and_descriptors(const Map &map, 
                                           std::vector<cv::KeyPoint> &keypoints_out, 
                                           cv::Mat &descriptors_out);
+
+void map__merge(const Map &map, std::vector<MapPoint> &me_map);
+
+void map__image_points_for_pose(const Map &map, 
+                                cv::Mat current_tr,
+                                cv::Mat current_rot, 
+                                cv::Mat camera_matrix,
+                                cv::Mat camera_distorsion,
+                                std::vector<MapPoint> &image_points_out);
 
 
 #endif // End __MAP_HPP__
