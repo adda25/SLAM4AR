@@ -9,6 +9,13 @@ MapSector _map__create_sector(const int reference_sector_bounds[6], cv::Point3f 
 cv::Mat _cam_point_from_pixel(cv::Point3f point); 
 cv::Point3f _box_center_from_bounds(const int bounds[6]);
 bool _map__similar_point_in_sector(MapPoint point, MapSector &sector);
+bool _point_inside_pyramid(cv::Point3f py_center, 
+                           cv::Point3f py_up_left, 
+                           cv::Point3f py_up_right,
+                           cv::Point3f py_down_right,
+                           cv::Point3f py_down_left,
+                           cv::Point3f point_to_check);
+cv::Mat _vector_from_2_points(cv::Point3f p1, cv::Point3f p2);
 
 int inline 
 get_intersection(float fDst1, float fDst2, cv::Point3f P1, cv::Point3f P2, cv::Point3f &Hit) 
@@ -167,68 +174,41 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
   cv::Mat estimated_camera_pose;
   camera_pose.copyTo(estimated_camera_pose);
   estimated_camera_pose = estimated_camera_pose.inv();
-  static bool first = true;
+  //std::cout << estimated_camera_pose << std::endl;
   Map partial_map;
-  cv::Point3f box_e[2];
-  cv::Point3f box_i[2];
-  // Get 2 camera "box"
-  cv::Mat be0 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(-640, 360, 50));
-  cv::Mat be1 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640,  -360, 55));
-  //cv::Mat bi0 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(-640, 360, 3.0));
-  //cv::Mat bi1 = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640,  -360, 5.0));
-  box_e[0] = cv::Point3f(be0.at<double>(0, 0), be0.at<double>(1, 0), be0.at<double>(2, 0));
-  box_e[1] = cv::Point3f(be1.at<double>(0, 0), be1.at<double>(1, 0), be1.at<double>(2, 0));
-  //box_i[0] = cv::Point3f(bi0.at<double>(0, 0), bi0.at<double>(1, 0), bi0.at<double>(2, 0));
-  //box_i[1] = cv::Point3f(bi1.at<double>(0, 0), bi1.at<double>(1, 0), bi1.at<double>(2, 0));
-  // Get camera center
+  cv::Point3f cam_center, up_left_pt, up_right_pt, down_right_pt, down_left_pt;
   cv::Point3f box_center;
+
+  // Get camera center
   cv::Mat cam_c = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640, 360, 0));
-  cv::Point3f cam_center = cv::Point3f(cam_c.at<double>(0, 0), cam_c.at<double>(1, 0), cam_c.at<double>(2, 0));
+  cam_center = cv::Point3f(cam_c.at<double>(0, 0), cam_c.at<double>(1, 0), cam_c.at<double>(2, 0));
+
+  // Up-Left
+  cv::Mat u_l_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(0, 0, 1000));
+  up_left_pt = cv::Point3f(u_l_pt.at<double>(0, 0), u_l_pt.at<double>(1, 0), u_l_pt.at<double>(2, 0));
+
+  // Up-Right
+  cv::Mat u_r_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(1280, 0, 1000));
+  up_right_pt = cv::Point3f(u_r_pt.at<double>(0, 0), u_r_pt.at<double>(1, 0), u_r_pt.at<double>(2, 0));
+
+  // Down-Right
+  cv::Mat d_r_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(1280, 720, 1000));
+  down_right_pt = cv::Point3f(d_r_pt.at<double>(0, 0), d_r_pt.at<double>(1, 0), d_r_pt.at<double>(2, 0));
+
+  // Down-Left
+  cv::Mat d_l_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(0, 720, 1000));
+  down_left_pt = cv::Point3f(d_l_pt.at<double>(0, 0), d_l_pt.at<double>(1, 0), d_l_pt.at<double>(2, 0));
+
+  //std::cout << up_left_pt << " " << up_right_pt << " " << down_right_pt << " " << down_left_pt << std::endl;
+
   for (auto &sector : map) {
     if (sector.sector_points.size() == 0) {continue;}
     cv::Point3f hit;
     box_center = _box_center_from_bounds(sector.sector_bounds); // sector.sector_points[0].coords_3D_camera_sys;
-    int inside_e = check_line_box(box_e[0], box_e[1], box_center, cam_center, hit);
-    //int inside_i = check_line_box(box_i[0], box_i[1], box_center, cam_center, hit);
-    if (inside_e == 1) {
+    if (_point_inside_pyramid(cam_center, up_left_pt, up_right_pt, down_right_pt, down_left_pt, box_center)) {
         partial_map.push_back(sector);
     }
-    //std::cout << inside_e << " " << " " << box_e[0] << " " << box_e[1] << " cam_center: " << cam_center << " box_center: " << box_center <<  std::endl;
   }
-  /* if (first) { 
-    std::ofstream ofs;
-    ofs.open ("test_map.txt", std::ofstream::out | std::ofstream::app);
-    std::vector<cv::Point3f> grid = _map__grid(map);
-    for (auto &g : grid) {
-      ofs << g.x << " " << g.y << " " << g.z << " " << 255 << " " << 0 << " " << 0 << "\n";   
-    }
-    for (auto &s : map) {
-      for (auto &p : s.sector_points) {
-        ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << 0 << " " << 255 << " " << 0 << "\n";
-      }
-    }
-    ofs << cam_center.x << " " << cam_center.y << " " << cam_center.z << " " << 0 << " " << 0 << " " << 255 << "\n";
-    ofs << box_e[0].x << " " << box_e[0].y << " " << box_e[0].z << " " << 0 << " " << 0 << " " << 255 << "\n";
-    ofs << box_e[1].x << " " << box_e[1].y << " " << box_e[1].z << " " << 0 << " " << 0 << " " << 255 << "\n";
-    for (auto &sector : map) {
-      box_center = _box_center_from_bounds(sector.sector_bounds);
-      ofs << box_center.x << " " << box_center.y << " " << box_center.z << " " << 0 << " " << 255 << " " << 255 << "\n";
-    }
-
-    ofs.close();
-    first = false;
-  } else {
-    std::ofstream ofs;
-    ofs.open ("test_map.txt", std::ofstream::out | std::ofstream::app);
-    ofs << cam_center.x << " " << cam_center.y << " " << cam_center.z << " " << 0 << " " << 0 << " " << 255 << "\n";
-    ofs << box_e[0].x << " " << box_e[0].y << " " << box_e[0].z << " " << 0 << " " << 0 << " " << 255 << "\n";
-    ofs << box_e[1].x << " " << box_e[1].y << " " << box_e[1].z << " " << 0 << " " << 0 << " " << 255 << "\n";
-    for (auto &sector : map) {
-      box_center = _box_center_from_bounds(sector.sector_bounds);
-      ofs << box_center.x << " " << box_center.y << " " << box_center.z << " " << 0 << " " << 255 << " " << 255 << "\n";
-    }
-    ofs.close();
-  }*/
   std::cout << "partial_map: " << partial_map.size() << std::endl;
   if (partial_map.size() == 0) {
     return map;
@@ -493,5 +473,62 @@ _box_center_from_bounds(const int bounds[6])
   return cv::Point3f(c_x, c_y, c_z);
 }
 
+bool 
+_point_inside_pyramid(cv::Point3f py_center, 
+                      cv::Point3f py_up_left, 
+                      cv::Point3f py_up_right,
+                      cv::Point3f py_down_right,
+                      cv::Point3f py_down_left,
+                      cv::Point3f point_to_check)
+{
+  // Right face check  
+  cv::Mat up_right = _vector_from_2_points(py_center, py_up_right);
+  cv::Mat dw_right = _vector_from_2_points(py_center, py_down_right);
+  cv::Mat target_up_right = _vector_from_2_points(point_to_check, py_up_right);
+  cv::Mat cross_up_right__dw__right = up_right.cross(dw_right);
+  double dot_rf_t = target_up_right.dot(cross_up_right__dw__right);
+  
+  // Left face check  
+  cv::Mat up_left = _vector_from_2_points(py_center, py_up_left);
+  cv::Mat dw_left = _vector_from_2_points(py_center, py_down_left);
+  cv::Mat target_up_left = _vector_from_2_points(point_to_check, py_up_left);
+  cv::Mat cross_up_left__dw__left = up_left.cross(dw_left);
+  double dot_lf_t = target_up_right.dot(cross_up_left__dw__left);
+
+  // Up face check
+  cv::Mat target_up = _vector_from_2_points(point_to_check, py_up_left);
+  cv::Mat cross_up_right__up__left = up_right.cross(up_left);
+  double dot_u_t = target_up.dot(cross_up_right__up__left);
+
+  // Down face check
+  cv::Mat target_dw_right = _vector_from_2_points(point_to_check, py_down_right);
+  cv::Mat cross_dw_right__dw__left = dw_right.cross(dw_left);
+  double dot_d_t = target_dw_right.dot(cross_dw_right__dw__left);
+
+  //std::cout << "--> " << dot_rf_t << " " << dot_lf_t << " " << dot_u_t << " " << dot_d_t << std::endl;
+
+  if (dot_rf_t < 0 && 
+      dot_lf_t < 0 &&
+      dot_u_t  > 0 &&
+      dot_d_t  < 0) {
+        return true;
+      }  
+  return false;
+}
+
+cv::Mat 
+_vector_from_2_points(cv::Point3f p1, cv::Point3f p2)
+{
+  cv::Mat v = cv::Mat (1, 3, CV_32F);
+  float mod = 1;
+  v.at<float>(0,0) = p2.x - p1.x;
+  v.at<float>(0,1) = p2.y - p1.y;
+  v.at<float>(0,2) = p2.z - p1.z;
+  mod = sqrt(pow(v.at<float>(0,0), 2) + pow(v.at<float>(0,1), 2) + pow(v.at<float>(0,2), 2));
+  v.at<float>(0,0) /= mod;
+  v.at<float>(0,1) /= mod;
+  v.at<float>(0,2) /= mod;
+  return v;
+}
 
 

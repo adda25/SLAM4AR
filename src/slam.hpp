@@ -38,6 +38,8 @@ std::vector<MapPoint> slam__map(const SlamSystem &slam_sys,
 
 cv::Mat slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image);
 
+cv::Mat slam_localize_and_update(const SlamSystem &slam_sys, Map &map, cv::Mat &image);
+
 cv::Mat slam__estimated_pose(std::vector<MapPoint> matches, MyCamereParamReader camera); 
 cv::Mat slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector, 
                              cv::vector<cv::Point3f> obj_points_vector, 

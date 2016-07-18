@@ -21,11 +21,14 @@ SlamAPI::slam_c_map(cv::VideoCapture capture, int count, float min_dist)
   Map slam_map = Map();
   uint a[3] = {5, 5, 1};
   uint b[3] = {50, 50, 50};
+  int total_map_points_counter = 0;
+  printf("-> Start mapping...\n");
 
   slam_map = map__create(a, b);
   if(!capture.isOpened()) { std::cout << "--> Capture is not open" << std::endl; }
   slam__init(slam_sys, camera_path);
   for (int i = 0; i < count; i++) {
+    printf("-> Progress: %d / %d  sectors_founds: %lu total_points: %d \r", i, count, slam_map.size(), total_map_points_counter);
     capture >> image;
     if (image.cols == 0) { break; }
     switch (image_ready) {
@@ -43,13 +46,11 @@ SlamAPI::slam_c_map(cv::VideoCapture capture, int count, float min_dist)
         if (distance > min_dist) {
           std::vector<MapPoint> mps = slam__map(slam_sys, image1, image, m1.marker[0].pose(), m2.marker[0].pose());
           image_ready = 0;
-          std::cout << "Map points: " << mps.size() << std::endl;
+          //std::cout << "Map points: " << mps.size() << std::endl;
           map__update(slam_map, mps, m2.marker[0].pose(), image);
-          if (mps.size() < 4) { continue; }
-          std::cout << "Real pose: " << m2.marker[0].pose() << std::endl;
-           
-          cv::Mat estimated_pose = slam__estimated_pose(mps, slam_sys.camera);
-          std::cout << "Estimated pose: " << estimated_pose << std::endl;
+          total_map_points_counter += mps.size();
+          if (mps.size() < 4) { continue; } 
+          //cv::Mat estimated_pose = slam__estimated_pose(mps, slam_sys.camera);
         }
       }
     }
@@ -69,15 +70,13 @@ SlamAPI::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map)
   Marker m1;
   SlamSystem slam_sys = SlamSystem();
   slam__init(slam_sys, camera_path);
-  
-  std::cout << "Start video test" << std::endl;
+  printf("\n-> Start localize...\n");
   cv::Mat image;
   for (int i = 0; i < count_test; i++) {
     capture_test >> image;
     if (image.cols == 0) { break; }
     m1 = marker_detector.detectMarker(image);
     if (m1.marker.size() == 0) { std::cout << "No marker detected" << std::endl; } 
-    std::cout << "Real pose: " << m1.marker[0].trVec << std::endl;
     real_poses.push_back(cv::Point3d(m1.marker[0].trVec.at<double>(0,0), m1.marker[0].trVec.at<double>(1,0), m1.marker[0].trVec.at<double>(2,0)));
     if (estimated_camera_pose.rows != 0) {
       Map p_map = map__sectors_in_view(map, estimated_camera_pose);
@@ -85,7 +84,9 @@ SlamAPI::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map)
     } else {
       estimated_camera_pose = slam__localize(slam_sys, map, image);
     }
-    std::cout << "Estimated pose: " << estimated_camera_pose << std::endl;
+    std::cout << "--> Diff pose: " << m1.marker[0].trVec.at<double>(0,0) - estimated_camera_pose.at<double>(0,3) 
+              << " " << m1.marker[0].trVec.at<double>(1,0) - estimated_camera_pose.at<double>(1,3) 
+              << " " << m1.marker[0].trVec.at<double>(2,0) - estimated_camera_pose.at<double>(2,3) << " \n" << std::flush;
     estimated_poses.push_back(cv::Point3d(estimated_camera_pose.at<double>(0,3), estimated_camera_pose.at<double>(1,3), estimated_camera_pose.at<double>(2,3)));
   }
   std::ofstream ofs;

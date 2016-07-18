@@ -127,7 +127,6 @@ slam__map(const SlamSystem &slam_sys,
   _slam__split_matches(matches, keypoints1, descriptors1, keypoints2, descriptors2, matched_points1, matched_points2, true);
   //debug_pair(image_1, image_2, matched_points1, matched_points2);
   std::vector<MapPoint> total_matches = _slam__triangulate(image_1, matched_points1, pose_1, matched_points2, pose_2);  
-  std::cout << "Before triangulation: " << matched_points1.size() << " after: " << total_matches.size() << std::endl;
   return total_matches;
 }
 
@@ -150,15 +149,22 @@ slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
   descriptors = _slam__extract_descriptors(slam_sys, image, keypoints);
   map__merge_keypoints_and_descriptors(map, old_keypoints, old_descriptors);
   new_matches = _slam__match_features(old_descriptors, descriptors);
-  std::cout << " Match after: " << new_matches.size() << std::endl;
+  //std::cout << " Match after: " << new_matches.size() << std::endl;
   _slam__split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
   mapMatchFt = _slam__find_p2p_correspondence(map, matched_points1, matched_points2);
   _slam__good_data_for_solvePnp(mapMatchFt, img_points_vector, obj_points_vector);
-  std::cout << "Pose size: " << img_points_vector.size() << std::endl;
+  //std::cout << "Pose size: " << img_points_vector.size() << std::endl;
   if (img_points_vector.size() < 7) { return cv::Mat(4, 4, CV_64F, double(0)); }
   pose = slam__estimated_pose(img_points_vector, obj_points_vector, slam_sys.camera);
-  measure_chrono(st, "-> calc_pose_with_matches time: ");
+  //measure_chrono(st, "-> calc_pose_with_matches time: ");
   return pose;
+}
+
+cv::Mat 
+slam_localize_and_update(const SlamSystem &slam_sys, Map &map, cv::Mat &image) 
+{
+  cv::Mat pose;
+  return pose; 
 }
 
 void 

@@ -2,6 +2,7 @@
 #define __ASVS_HPP__
 
 #include <opencv2/opencv.hpp>
+#include <stdio.h>
 #include <vector>
 #include <fstream>
 #include "slam.hpp"
