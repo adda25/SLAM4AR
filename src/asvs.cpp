@@ -9,7 +9,7 @@ template <typename T> void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& dist
 }
 
 Map
-EyesHelper::slam_c_map(cv::VideoCapture capture, int count, float min_dist) 
+SlamAPI::slam_c_map(cv::VideoCapture capture, int count, float min_dist) 
 {
   cv::Mat image;
   MyMarkerDetector marker_detector = MyMarkerDetector(120.0, camera_path);
@@ -54,12 +54,12 @@ EyesHelper::slam_c_map(cv::VideoCapture capture, int count, float min_dist)
       }
     }
   }
-  map__remove_empty_sectors(slam_map);
+  map__remove_empty_sectors(slam_map, 3);
   return slam_map;
 }
 
 void 
-EyesHelper::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map) 
+SlamAPI::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map) 
 {
   Map tot_matches;
   cv::Mat estimated_camera_pose;

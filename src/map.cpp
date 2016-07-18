@@ -100,7 +100,7 @@ map__update(Map &map,
       continue;
     }
     // Update sector
-    //if (_map__similar_point_in_sector(p, map[sector_index])) { continue; }
+    if (_map__similar_point_in_sector(p, map[sector_index])) { continue; }
     map[sector_index].sector_points.push_back(p);
     map[sector_index].sector_poses.push_back(pose);
     map[sector_index].sector_frames.push_back(frame);
@@ -125,11 +125,8 @@ bool
 _map__similar_point_in_sector(MapPoint point, MapSector &sector)
 {
   for (auto &p : sector.sector_points) {
-    double distance = sqrt(pow(point.coords_3D.x - p.coords_3D.x, 2) + 
-                           pow(point.coords_3D.y - p.coords_3D.y, 2) + 
-                           pow(point.coords_3D.z - p.coords_3D.z, 2));
-    //std::vector<cv::DMatch>  dm = _map__match_features(point.descriptor, p.descriptor);
-    if (distance < 3) {
+    std::vector<cv::DMatch>  dm = _map__match_features(point.descriptor, p.descriptor);
+    if (dm[0].distance < 3) {
         std::cout << "--> Refining " << p.coords_3D << " " << point.coords_3D << std::endl;
         p.coords_3D.x = (p.coords_3D.x + point.coords_3D.x) * 0.5;
         p.coords_3D.x = (p.coords_3D.y + point.coords_3D.y) * 0.5;
@@ -142,10 +139,10 @@ _map__similar_point_in_sector(MapPoint point, MapSector &sector)
 }
 
 void 
-map__remove_empty_sectors(Map &map) 
+map__remove_empty_sectors(Map &map, uint min_size) 
 {
   for (size_t i = 0; i < map.size(); i++) {
-    if (map[i].sector_points.size() == 0) {
+    if (map[i].sector_points.size() <= min_size) {
       map.erase(map.begin() + i);
     }
   }

@@ -7,10 +7,10 @@
 #include "slam.hpp"
 #include "marker.hpp"
 
-class EyesHelper
+class SlamAPI
 {
 public:
-  EyesHelper(std::string cam_path) {
+  SlamAPI(std::string cam_path) {
     camera_path = cam_path;
   }
   

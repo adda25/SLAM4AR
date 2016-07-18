@@ -34,7 +34,7 @@ Map  map__create(uint sectors[3], uint sector_size[3]);
 
 void map__update(Map &map, std::vector<MapPoint> points, const cv::Mat pose, const cv::Mat &frame);
 
-void map__remove_empty_sectors(Map &map);
+void map__remove_empty_sectors(Map &map, uint min_size = 0);
 
 int  map__sector_for_coords(Map &map, cv::Point3f coords_3D);
 
