@@ -7,6 +7,8 @@ void test_map_and_pose_system(std::vector<int> params);
 void test_write_and_load_map(std::vector<int> params);
 void test_find_object(std::vector<int> params);
 
+std::string camera_path = "/Users/adda/Work/TDOR2/out_camera_data_iOS_720_3.yml";
+
 int 
 main(int argc, char** argv) 
 {
@@ -24,7 +26,6 @@ main(int argc, char** argv)
 void 
 test_map_system(std::vector<int> params) 
 {
-  std::string camera_path = "/Users/adda/Work/TDOR2/out_camera_data_iOS_720_3.yml";
   cv::string video_path = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v";
   SlamAPI helper = SlamAPI(camera_path);
   cv::VideoCapture capture(video_path);
@@ -35,22 +36,20 @@ test_map_system(std::vector<int> params)
 void 
 test_map_and_pose_system(std::vector<int> params) 
 {
-  std::string camera_path = "/Users/adda/Work/TDOR2/out_camera_data_iOS_720_3.yml";
   cv::string video_path = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v"; // 33
-  cv::string video_path_test = "/Users/adda/Work/Eyes/src/video/calc.m4v"; // 34
+  cv::string video_path_test = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v"; // 34
   SlamAPI helper = SlamAPI(camera_path);
   cv::VideoCapture capture(video_path);
   cv::VideoCapture capture_test(video_path_test);
-  //Map map = helper.slam_map(capture, params[1], params[3]);
-  Map map = map__load_from_file("./maps/map_calc.txt");
+  Map map = helper.slam_map(capture, params[1], params[3]);
+  //Map map = map__load_from_file("./maps/map_calc.txt");
   //map__write("map.txt", map, true);
-  helper.slam_localize(capture_test, params[1], map);
+  helper.slam_localize(capture_test, params[2], map);
 }
 
 void 
 test_write_and_load_map(std::vector<int> params)
 {
-  std::string camera_path = "/Users/adda/Work/TDOR2/out_camera_data_iOS_720_3.yml";
   cv::string video_path = "/Users/adda/Work/Eyes/src/video/calc.m4v"; 
   SlamAPI helper = SlamAPI(camera_path);
   cv::VideoCapture capture(video_path);
@@ -62,7 +61,6 @@ test_write_and_load_map(std::vector<int> params)
 void 
 test_find_object(std::vector<int> params)
 {
-  std::string camera_path = "/Users/adda/Work/TDOR2/out_camera_data_iOS_720_3.yml";
   cv::string video_path_test = "/Users/adda/Work/Eyes/src/video/test_bike_calc.m4v";
   SlamAPI helper = SlamAPI(camera_path);
   cv::VideoCapture capture_test(video_path_test);
@@ -81,7 +79,12 @@ test_find_object(std::vector<int> params)
 // 2
 // MAP-LOC
 
-// Oggi
+// Domani
+// -> Togliere parti hardcoded
+// -> Incrementare precisione, test senza punti del marker
 // -> Disegno feature attive / non attive
 // -> Marker 3d
-// -> Riconoscimento oggetti
+// -> Keypoint dovrebbero avere dentro un indice di qualità, guarda
+// -> Fine tuning parametri ORB
+
+

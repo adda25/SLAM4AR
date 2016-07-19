@@ -212,7 +212,7 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
         partial_map.push_back(sector);
     }
   }
-  std::cout << "partial_map: " << partial_map.size() << std::endl;
+  //std::cout << "partial_map: " << partial_map.size() << std::endl;
   if (partial_map.size() == 0) {
     return map;
   }

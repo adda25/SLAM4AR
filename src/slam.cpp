@@ -289,7 +289,7 @@ _slam__triangulate(cv::Mat image_1,
 }
 
 /*  A x = B  */
-std::vector<double> 
+/*std::vector<double> 
 _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22) 
 {
     cv::Mat A = cv::Mat(3, 2, CV_64F);
@@ -315,8 +315,65 @@ _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv
     double y2 = p21.y + x(1,0) * (p22.y - p21.y);
     double z2 = p21.z + x(1,0) * (p22.z - p21.z);
     std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
+    std::cout << "-------------------" << std::endl;
+    std::cout << MA << "#\n" << x << "#\n" << MB << std::endl;
     double relative_error = (MA * x - MB).norm() / MB.norm(); 
     if (relative_error > slam_sys_pfr_pr.triangulation_relative_error) { // 0.0002
+      sol[0] = -9999999;
+      return sol;
+    }
+    return sol;
+}*/
+
+double 
+matrix_norm(cv::Mat matrix)
+{
+  double max = 0.0; /* tutte le somme sono >= 0 */ 
+  for (int j = 0; j < matrix.cols; ++j) {
+    double sum = 0.0;
+    for (int i = 0; i < matrix.rows; ++i) {
+        sum += fabs(matrix.at<double>(i,j));
+    }
+    if (sum > max) {
+        max = sum;
+    }
+  }
+  return max;
+}
+// A = 3x2  X = 2x1 B = 3x1
+// A * X =  3 * 1
+
+std::vector<double> 
+_slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22) 
+{
+    cv::Mat A = cv::Mat(3, 2, CV_64F);
+    cv::Mat B = cv::Mat(3, 1, CV_64F);
+    cv::Mat X;
+    A.at<double>(0,0) = p12.x - p11.x; A.at<double>(0,1) = -p22.x + p21.x;
+    A.at<double>(1,0) = p12.y - p11.y; A.at<double>(1,1) = -p22.y + p21.y;
+    A.at<double>(2,0) = p12.z - p11.z; A.at<double>(2,1) = -p22.z + p21.z;
+    B.at<double>(0,0) = p21.x - p11.x;
+    B.at<double>(1,0) = p21.y - p11.y;
+    B.at<double>(2,0) = p21.z - p11.z;
+
+    cv::invert(A, X, cv::DECOMP_SVD);
+    cv::Mat res = X * B;
+    double x1 = p11.x + res.at<double>(0,0) * (p12.x - p11.x);
+    double y1 = p11.y + res.at<double>(0,0) * (p12.y - p11.y);
+    double z1 = p11.z + res.at<double>(0,0) * (p12.z - p11.z);
+    double x2 = p21.x + res.at<double>(0,1) * (p22.x - p21.x);
+    double y2 = p21.y + res.at<double>(0,1) * (p22.y - p21.y);
+    double z2 = p21.z + res.at<double>(0,1) * (p22.z - p21.z);
+    
+    cv::Mat xx = cv::Mat(2,1,CV_64F);
+    xx.at<double>(0,0) = res.at<double>(0,0);
+    xx.at<double>(1,0) = res.at<double>(0,1);
+
+    std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
+
+    double relative_error = matrix_norm(A * xx - B) / matrix_norm(B);
+    //std::cout << relative_error << std::endl; 
+    if (relative_error > 0.002) { // 0.0002
       sol[0] = -9999999;
       return sol;
     }
@@ -529,14 +586,7 @@ draw_cube_on_ref_sys(cv::Mat &image,
 }
 
 
-/*std::cout << A << " --- " << B << std::endl;
- cv::invert(A, X, cv::DECOMP_SVD);
- cv::Mat res = X * B;
- std::cout << X * B << std::endl;
- double x1 = p11.x + res.at<double>(0,0) * p12.x - p11.x;
- double y1 = p11.y + res.at<double>(0,0) * p12.y - p11.y;
- double z1 = p11.z + res.at<double>(0,0) * p12.z - p11.z;
- std::cout << x1 << " " << y1 << " " << z1 << std::endl;*/
+
 
 
 
