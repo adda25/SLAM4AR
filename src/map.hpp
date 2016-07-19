@@ -3,17 +3,18 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <stdint.h>
 #include <opencv2/opencv.hpp>
-
 
 typedef struct 
 {
   cv::Point3f coords_3D;
   cv::Point3f coords_3D_camera_sys;
   cv::KeyPoint keypoint;
-  cv::Mat descriptor;   
+  cv::Mat descriptor  = cv::Mat(1, 32, CV_8U);   
   uint hits = 0;
   cv::Point2f point_pixel_pos;
+  cv::Point3f pixel_colors;
 } MapPoint;
 
 typedef struct 
@@ -49,6 +50,9 @@ of the map points. If write_grid is true,
 the function also write the map grid.
 */
 void map__write(std::string filename, const Map &map_to_write, bool write_grid = false);
+
+void map__save_on_file(std::string filename, const Map &map_to_write);
+Map  map__load_from_file(std::string filename);
 
 /* Fills the keypoint vector and
 the descriptor Mat with the keypoints and descriptors

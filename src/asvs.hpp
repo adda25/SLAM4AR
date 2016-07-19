@@ -17,9 +17,9 @@ public:
   
   std::string camera_path;
 
-  Map slam_c_map(cv::VideoCapture capture, int count, float min_dist);
-
-  void slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map);  
+  Map  slam_map(cv::VideoCapture capture, int count, float min_dist);
+  void slam_localize(cv::VideoCapture capture_test, int count_test, Map map);  
+  void slam_find_objects(cv::VideoCapture capture, int count_test, std::vector<Map> objects_maps);
 };
 
 

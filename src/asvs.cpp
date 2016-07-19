@@ -1,7 +1,8 @@
 #include "asvs.hpp"
 
 
-template <typename T> void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& distance) {
+template <typename T> 
+void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& distance) {
     T x = trvec2.at<T>(0,0) - trvec1.at<T>(0,0);
     T y = trvec2.at<T>(1,0) - trvec1.at<T>(1,0);
     T z = trvec2.at<T>(2,0) - trvec1.at<T>(2,0);
@@ -9,7 +10,7 @@ template <typename T> void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& dist
 }
 
 Map
-SlamAPI::slam_c_map(cv::VideoCapture capture, int count, float min_dist) 
+SlamAPI::slam_map(cv::VideoCapture capture, int count, float min_dist) 
 {
   cv::Mat image;
   MyMarkerDetector marker_detector = MyMarkerDetector(120.0, camera_path);
@@ -46,7 +47,6 @@ SlamAPI::slam_c_map(cv::VideoCapture capture, int count, float min_dist)
         if (distance > min_dist) {
           std::vector<MapPoint> mps = slam__map(slam_sys, image1, image, m1.marker[0].pose(), m2.marker[0].pose());
           image_ready = 0;
-          //std::cout << "Map points: " << mps.size() << std::endl;
           map__update(slam_map, mps, m2.marker[0].pose(), image);
           total_map_points_counter += mps.size();
           if (mps.size() < 4) { continue; } 
@@ -60,7 +60,7 @@ SlamAPI::slam_c_map(cv::VideoCapture capture, int count, float min_dist)
 }
 
 void 
-SlamAPI::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map) 
+SlamAPI::slam_localize(cv::VideoCapture capture_test, int count_test, Map map) 
 {
   Map tot_matches;
   cv::Mat estimated_camera_pose;
@@ -77,18 +77,24 @@ SlamAPI::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map)
     if (image.cols == 0) { break; }
     m1 = marker_detector.detectMarker(image);
     if (m1.marker.size() == 0) { std::cout << "No marker detected" << std::endl; } 
-    real_poses.push_back(cv::Point3d(m1.marker[0].trVec.at<double>(0,0), m1.marker[0].trVec.at<double>(1,0), m1.marker[0].trVec.at<double>(2,0)));
+    //real_poses.push_back(cv::Point3d(m1.marker[0].trVec.at<double>(0,0), m1.marker[0].trVec.at<double>(1,0), m1.marker[0].trVec.at<double>(2,0)));
     if (estimated_camera_pose.rows != 0) {
       Map p_map = map__sectors_in_view(map, estimated_camera_pose);
       estimated_camera_pose = slam__localize(slam_sys, p_map, image);
     } else {
       estimated_camera_pose = slam__localize(slam_sys, map, image);
     }
-    std::cout << "--> Diff pose: " << m1.marker[0].trVec.at<double>(0,0) - estimated_camera_pose.at<double>(0,3) 
+    /*std::cout << "--> Diff pose: " << m1.marker[0].trVec.at<double>(0,0) - estimated_camera_pose.at<double>(0,3) 
               << " " << m1.marker[0].trVec.at<double>(1,0) - estimated_camera_pose.at<double>(1,3) 
-              << " " << m1.marker[0].trVec.at<double>(2,0) - estimated_camera_pose.at<double>(2,3) << " \n" << std::flush;
+              << " " << m1.marker[0].trVec.at<double>(2,0) - estimated_camera_pose.at<double>(2,3) << " \n" << std::flush;*/
     estimated_poses.push_back(cv::Point3d(estimated_camera_pose.at<double>(0,3), estimated_camera_pose.at<double>(1,3), estimated_camera_pose.at<double>(2,3)));
+    // Draw cube on ref sys
+    draw_cube_on_ref_sys(image, slam_sys.camera.getCameraMatrix(), slam_sys.camera.getDistorsion(), estimated_camera_pose, 120, cv::Scalar(255, 0, 0, 255));
+    //draw_cube_on_ref_sys(image, slam_sys.camera.getCameraMatrix(), slam_sys.camera.getDistorsion(), m1.marker[0].pose(), 120, cv::Scalar(0, 0, 255, 255));
+    cv::imshow("n", image);
+    cv::waitKey(5);
   }
+  /*
   std::ofstream ofs;
   ofs.open ("poses.csv", std::ofstream::out | std::ofstream::app);
   ofs << "r_x, " << "r_y, " << "r_z, " << "e_x, " << "e_y, " << "e_z, " << "\n";
@@ -99,5 +105,37 @@ SlamAPI::slam_c_localize(cv::VideoCapture capture_test, int count_test, Map map)
     ofs << real_poses[i].x << "," << real_poses[i].y << "," << real_poses[i].z << "," 
       << estimated_poses[i].x << "," << estimated_poses[i].y << "," << estimated_poses[i].z << "\n";
   }
-  ofs.close();
+  ofs.close();*/
 }
+
+void 
+SlamAPI::slam_find_objects(cv::VideoCapture capture, int count_test, std::vector<Map> objects_maps)
+{
+  cv::Mat image;
+  SlamSystem slam_sys = SlamSystem();
+  slam__init(slam_sys, camera_path);
+  
+  for (int i = 0; i < count_test; i++) {
+    capture >> image;
+    if (image.cols == 0) { break; }
+    std::vector<cv::Rect> rects;
+    rects = slam__find_objects(slam_sys, objects_maps, image);
+    for (auto &r : rects) {
+      cv::rectangle(image, r, cv::Scalar(0,0,255,255));
+    }
+    cv::imshow("find_objects", image);
+    cv::waitKey(10);
+  } 
+}
+
+
+
+
+
+
+
+
+
+
+
+

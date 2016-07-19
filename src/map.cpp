@@ -17,7 +17,10 @@ bool _point_inside_pyramid(cv::Point3f py_center,
                            cv::Point3f point_to_check);
 cv::Mat _vector_from_2_points(cv::Point3f p1, cv::Point3f p2);
 
-int inline 
+// Aux
+std::vector<std::string> split(std::string data, std::string token);
+
+int  
 get_intersection(float fDst1, float fDst2, cv::Point3f P1, cv::Point3f P2, cv::Point3f &Hit) 
 {
   if ((fDst1 * fDst2) >= 0.0f) return 0;
@@ -26,7 +29,7 @@ get_intersection(float fDst1, float fDst2, cv::Point3f P1, cv::Point3f P2, cv::P
   return 1;
 }
 
-int inline 
+int  
 in_box(cv::Point3f Hit, cv::Point3f B1, cv::Point3f B2, const int Axis) 
 {
   if ( Axis==1 && Hit.z > B1.z && Hit.z < B2.z && Hit.y > B1.y && Hit.y < B2.y) return 1;
@@ -224,7 +227,7 @@ map__draw(cv::Mat &frame_to_draw, const Map &map_to_draw, bool draw_grid) {
 void 
 map__write(std::string filename, const Map &map_to_write, bool write_grid) {
   std::ofstream ofs;
-  ofs.open (filename, std::ofstream::out | std::ofstream::app);
+  ofs.open (filename, std::ofstream::trunc);
   if (write_grid) {
     std::vector<cv::Point3f> grid = _map__grid(map_to_write);
     for (auto &g : grid) {
@@ -285,6 +288,73 @@ map__image_points_for_pose(const Map &map,
   }  
 }
 
+void 
+map__save_on_file(std::string filename, const Map &map_to_write)
+{
+  std::ofstream ofs;
+  ofs.open (filename, std::ofstream::trunc);
+  for (auto &m : map_to_write) {
+    if (m.sector_points.size() == 0) { continue; }
+    ofs << "#SECTOR\n";
+    ofs << "#BOUNDS " << m.sector_bounds[0] 
+        << " " << m.sector_bounds[1] 
+        << " " << m.sector_bounds[2] 
+        << " " << m.sector_bounds[3] 
+        << " " << m.sector_bounds[4] 
+        << " " << m.sector_bounds[5] << "\n";
+    for (auto &p : m.sector_points) {
+        ofs << "#MAP_POINT\n";
+        ofs << "#MP-C3D " << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << "\n";
+        ofs << "#MP-KP " << p.keypoint.pt.x << " " << p.keypoint.pt.y << "\n";
+        ofs << "#MP-DS ";
+        //std::cout << (uint)(uint8_t)p.descriptor.at<uchar>(0,3) << " " << (uint)(uint8_t)p.descriptor.at<uchar>(3,0) << std::endl;
+        for (int i = 0; i < 32; i++) { ofs << (uint)(uint8_t)p.descriptor.at<uchar>(0,i) << " "; }
+        ofs << "\n";
+    }
+    ofs << "\n";
+  }
+  ofs.close();
+}
+
+Map 
+map__load_from_file(std::string filename)
+{
+  std::string line;  
+  Map loaded_map;
+  std::ifstream ifs;
+  ifs.open (filename, std::ifstream::in);
+  while (getline(ifs, line)) {
+    std::vector<std::string> line_ary = split(line, " ");
+    if (line_ary[0] == "#SECTOR") {
+      loaded_map.push_back(MapSector());
+    } else if (line_ary[0] == "#BOUNDS") {
+      int bounds[6] = {stoi(line_ary[1]),
+                       stoi(line_ary[2]),
+                       stoi(line_ary[3]),
+                       stoi(line_ary[4]),
+                       stoi(line_ary[5]),
+                       stoi(line_ary[6])}; 
+      for (int i = 0; i < 6; i++) { loaded_map.back().sector_bounds[i] = bounds[i]; }
+    } else if (line_ary[0] == "#MAP_POINT") {
+      loaded_map.back().sector_points.push_back(MapPoint());
+      loaded_map.back().sector_points.back().descriptor = cv::Mat(1, 32, CV_8U);
+    } else if (line_ary[0] == "#MP-C3D") {
+      loaded_map.back().sector_points.back().coords_3D = cv::Point3f(stof(line_ary[1]), 
+                                                                     stof(line_ary[2]), 
+                                                                     stof(line_ary[3]));
+    } else if (line_ary[0] == "#MP-KP") {
+      loaded_map.back().sector_points.back().keypoint.pt = cv::Point2f(stof(line_ary[1]), 
+                                                                       stof(line_ary[2]));
+    } else if (line_ary[0] == "#MP-DS") {
+      for (int i = 0; i < line_ary.size() - 2; i++) {
+        int value  = (int)stoi(line_ary[i+1]);
+        loaded_map.back().sector_points.back().descriptor.at<uchar>(0,i) = value;
+      }
+    }
+  }
+  ifs.close();
+  return loaded_map;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -487,26 +557,20 @@ _point_inside_pyramid(cv::Point3f py_center,
   cv::Mat target_up_right = _vector_from_2_points(point_to_check, py_up_right);
   cv::Mat cross_up_right__dw__right = up_right.cross(dw_right);
   double dot_rf_t = target_up_right.dot(cross_up_right__dw__right);
-  
   // Left face check  
   cv::Mat up_left = _vector_from_2_points(py_center, py_up_left);
   cv::Mat dw_left = _vector_from_2_points(py_center, py_down_left);
   cv::Mat target_up_left = _vector_from_2_points(point_to_check, py_up_left);
   cv::Mat cross_up_left__dw__left = up_left.cross(dw_left);
   double dot_lf_t = target_up_right.dot(cross_up_left__dw__left);
-
   // Up face check
   cv::Mat target_up = _vector_from_2_points(point_to_check, py_up_left);
   cv::Mat cross_up_right__up__left = up_right.cross(up_left);
   double dot_u_t = target_up.dot(cross_up_right__up__left);
-
   // Down face check
   cv::Mat target_dw_right = _vector_from_2_points(point_to_check, py_down_right);
   cv::Mat cross_dw_right__dw__left = dw_right.cross(dw_left);
   double dot_d_t = target_dw_right.dot(cross_dw_right__dw__left);
-
-  //std::cout << "--> " << dot_rf_t << " " << dot_lf_t << " " << dot_u_t << " " << dot_d_t << std::endl;
-
   if (dot_rf_t < 0 && 
       dot_lf_t < 0 &&
       dot_u_t  > 0 &&
@@ -529,6 +593,21 @@ _vector_from_2_points(cv::Point3f p1, cv::Point3f p2)
   v.at<float>(0,1) /= mod;
   v.at<float>(0,2) /= mod;
   return v;
+}
+
+/// INSERT IN AUX
+std::vector<std::string> 
+split(std::string data, std::string token)
+{
+  std::vector<std::string> output;
+  size_t pos = std::string::npos;
+  do {
+    pos = data.find(token);
+    output.push_back(data.substr(0, pos));
+    if (std::string::npos != pos)
+      data = data.substr(pos + token.size());
+    } while (std::string::npos != pos);
+  return output;
 }
 
 

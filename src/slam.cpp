@@ -1,5 +1,11 @@
 #include "slam.hpp"
 
+struct SlamSystemPerformanceParams
+{
+  double triangulation_relative_error = 0.002;
+  int brief_patch_size = 32;
+} slam_sys_pfr_pr;
+
 std::chrono::high_resolution_clock::time_point
 get_chrono() { return std::chrono::high_resolution_clock::now(); }
 
@@ -46,6 +52,7 @@ std::vector<MapPoint> _slam__triangulate(cv::Mat image_1,
                                          std::vector<MapPoint> matched_points2, 
                                          cv::Mat pose2);
 std::vector<double> _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22); 
+cv::Rect _slam__detect_screen_region_for_map(const SlamSystem &slam_sys, const Map &obj_map, cv::Mat &image);
 cv::Point3f match_position_in_marker_frame(cv::Mat camera_pose, cv::Point3d p_solution);
 cv::Mat _slam__estimated_pose(std::vector<MapPoint> matches); 
 cv::Mat _slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector, cv::vector<cv::Point3f> obj_points_vector); 
@@ -53,6 +60,9 @@ std::vector<MapMatchFt_C> _slam__find_p2p_correspondence(const Map &map, const s
 void  _slam__good_data_for_solvePnp(std::vector<MapMatchFt_C> &mapMatchFt,
                                     cv::vector<cv::Point2f> &img_points_vector,
                                     cv::vector<cv::Point3f> &obj_points_vector);
+void debug_loc(cv::Mat image, const Map &map, std::vector<cv::Point2f> current_im_points);
+void debug_pair(cv::Mat im1, cv::Mat im2, std::vector<MapPoint> matched_points1, std::vector<MapPoint> matched_points2);
+
 //////
 cv::Mat 
 cam_point_from_pixel(cv::Point2f point, double z) 
@@ -89,25 +99,17 @@ rot_tr_mat(cv::Mat rot, cv::Mat tr)
 void 
 slam__init(SlamSystem &slam_sys, const std::string camera_path) 
 {
-  slam_sys.features_detector = new cv::OrbFeatureDetector(4000);
+  slam_sys.features_detector = new cv::OrbFeatureDetector(4000, 
+                                                          1.12f, 
+                                                          8, 
+                                                          31, 
+                                                          0, 
+                                                          2, 
+                                                          cv::ORB::HARRIS_SCORE, 
+                                                          31);
   slam_sys.descriptions_extractor = new cv::OrbDescriptorExtractor();
   slam_sys.camera = MyCamereParamReader();
   slam_sys.camera.readFromXMLFile(camera_path);
-}
-
-void 
-debug_pair(cv::Mat im1, cv::Mat im2, std::vector<MapPoint> matched_points1, std::vector<MapPoint> matched_points2) 
-{
-  cv::Mat fi = cv::Mat(im1.rows, im1.cols * 2, CV_8UC3);
-  im1.copyTo(fi(cv::Rect(0, 0, im1.cols, im1.rows)));
-  im2.copyTo(fi(cv::Rect(im1.cols, 0, im2.cols, im2.rows)));
-  for (int i = 0; i < matched_points1.size(); i++) {
-    cv::circle(fi, matched_points1[i].keypoint.pt, 5, cv::Scalar(255, 0 ,0));
-    cv::circle(fi, matched_points2[i].keypoint.pt + cv::Point2f(1280, 0), 5, cv::Scalar(255, 0 ,0));
-    cv::line(fi, matched_points1[i].keypoint.pt, matched_points2[i].keypoint.pt + cv::Point2f(1280, 0), cv::Scalar(0, 255 ,0));
-  }
-  cv::imshow("ni", fi);
-  cv::waitKey(10);
 }
 
 std::vector<MapPoint> 
@@ -133,14 +135,13 @@ slam__map(const SlamSystem &slam_sys,
 cv::Mat 
 slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
 {
-  std::chrono::high_resolution_clock::time_point st = get_chrono();
   std::vector<cv::KeyPoint> old_keypoints;
   std::vector<MapPoint> matched_points1;
   std::vector<MapPoint> matched_points2;
   cv::vector<cv::Point2f> img_points_vector;
   cv::vector<cv::Point3f> obj_points_vector;
   cv::Mat pose;
-  cv::Mat old_descriptors = cv::Mat(0, 32, CV_8U);
+  cv::Mat old_descriptors = cv::Mat(0, slam_sys_pfr_pr.brief_patch_size, CV_8U);
   std::vector<cv::DMatch> new_matches;
   std::vector<cv::KeyPoint> keypoints;
   cv::Mat descriptors;
@@ -149,15 +150,25 @@ slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
   descriptors = _slam__extract_descriptors(slam_sys, image, keypoints);
   map__merge_keypoints_and_descriptors(map, old_keypoints, old_descriptors);
   new_matches = _slam__match_features(old_descriptors, descriptors);
-  //std::cout << " Match after: " << new_matches.size() << std::endl;
   _slam__split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
   mapMatchFt = _slam__find_p2p_correspondence(map, matched_points1, matched_points2);
   _slam__good_data_for_solvePnp(mapMatchFt, img_points_vector, obj_points_vector);
-  //std::cout << "Pose size: " << img_points_vector.size() << std::endl;
   if (img_points_vector.size() < 7) { return cv::Mat(4, 4, CV_64F, double(0)); }
   pose = slam__estimated_pose(img_points_vector, obj_points_vector, slam_sys.camera);
-  //measure_chrono(st, "-> calc_pose_with_matches time: ");
+  debug_loc(image, map, img_points_vector);
   return pose;
+}
+
+std::vector<cv::Rect> 
+slam__find_objects(const SlamSystem &slam_sys, 
+                   std::vector<Map> objects_maps, 
+                   cv::Mat &image)
+{
+  std::vector<cv::Rect> obj_windows;
+  for (auto &m : objects_maps) {
+    obj_windows.push_back(_slam__detect_screen_region_for_map(slam_sys, m, image));
+  }
+  return obj_windows;
 }
 
 cv::Mat 
@@ -271,6 +282,7 @@ _slam__triangulate(cv::Mat image_1,
     if (solution[0] < -9999998) { continue; } 
     matched_points2[gm].coords_3D = match_position_in_marker_frame(pose1.inv(), cv::Point3d(solution[3], solution[4], solution[5]));
     matched_points2[gm].hits++;
+    //matched_points2[gm].pixel_colors()
     total_matches.push_back(matched_points2[gm]);
   }
   return total_matches;
@@ -304,7 +316,7 @@ _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv
     double z2 = p21.z + x(1,0) * (p22.z - p21.z);
     std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
     double relative_error = (MA * x - MB).norm() / MB.norm(); 
-    if (relative_error > 0.002) { // 0.0002
+    if (relative_error > slam_sys_pfr_pr.triangulation_relative_error) { // 0.0002
       sol[0] = -9999999;
       return sol;
     }
@@ -332,6 +344,42 @@ _slam__find_p2p_correspondence(const Map &map, const std::vector<MapPoint> &mp1,
   }
   return mapMatchFt;
 }
+
+cv::Rect 
+_slam__detect_screen_region_for_map(const SlamSystem &slam_sys, const Map &obj_map, cv::Mat &image)
+{
+  std::vector<cv::KeyPoint> old_keypoints;
+  std::vector<MapPoint> matched_points1;
+  std::vector<MapPoint> matched_points2;
+  cv::vector<cv::Point2f> img_points_vector;
+  cv::vector<cv::Point3f> obj_points_vector;
+  cv::Mat pose;
+  cv::Mat old_descriptors = cv::Mat(0, slam_sys_pfr_pr.brief_patch_size, CV_8U);
+  std::vector<cv::DMatch> new_matches;
+  std::vector<cv::KeyPoint> keypoints;
+  cv::Mat descriptors;
+  std::vector<MapMatchFt_C> mapMatchFt;
+  keypoints = _slam__search_features(slam_sys, image);
+  descriptors = _slam__extract_descriptors(slam_sys, image, keypoints);
+  map__merge_keypoints_and_descriptors(obj_map, old_keypoints, old_descriptors);
+  new_matches = _slam__match_features(old_descriptors, descriptors);
+  _slam__split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
+  mapMatchFt = _slam__find_p2p_correspondence(obj_map, matched_points1, matched_points2);
+  cv::Point2f coord = cv::Point2f(0,0);
+  int counter = 0;
+  if (mapMatchFt.size() > 400) {
+    for (auto &mmf : mapMatchFt) {
+      if (mmf.accuracy_index > 20) { continue; }
+      coord.x += mmf.new_found_ft_in_new_image.keypoint.pt.x;
+      coord.y += mmf.new_found_ft_in_new_image.keypoint.pt.y;
+      counter++;
+    }
+    coord.x /= counter;
+    coord.y /= counter;
+  }
+  return cv::Rect(coord - cv::Point2f(50,50), coord + cv::Point2f(50,50));
+}
+
 
 cv::Point3f
 match_position_in_marker_frame(cv::Mat camera_pose, cv::Point3d p_solution) {
@@ -361,13 +409,13 @@ slam__estimated_pose(std::vector<MapPoint> matches, MyCamereParamReader camera)
                img_points_vector, 
                camera.getCameraMatrix(), 
                camera.getDistorsion(), 
-               rVec, tVec, false, 1000, 5, 100, cv::noArray(),  
+               rVec, tVec, 
+               false, 1000, 5, 100, cv::noArray(),  
                CV_EPNP);
   cv::Rodrigues(rVec, rot_mat);
   pose = rot_tr_mat(rot_mat, tVec);
   return pose;
 }
-
 
 cv::Mat 
 slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector, 
@@ -380,10 +428,117 @@ slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector,
                img_points_vector, 
                camera.getCameraMatrix(), 
                camera.getDistorsion(), 
-               rVec, tVec, false, 1000, 5, 100, cv::noArray(),
+               rVec, tVec, 
+               false, 1000, 5, 100, cv::noArray(),
                CV_EPNP);
   cv::Rodrigues(rVec, rot_mat);
   pose = rot_tr_mat(rot_mat, tVec);
   return pose;
 }
+
+/* DRAWING */
+
+void 
+debug_loc(cv::Mat image, const Map &map, std::vector<cv::Point2f> current_im_points)
+{
+  for (int i = 0; i < current_im_points.size(); i++) {
+    cv::circle(image, current_im_points[i], 5, cv::Scalar(255, 0 ,0));
+  }
+}
+
+void 
+debug_pair(cv::Mat im1, cv::Mat im2, std::vector<MapPoint> matched_points1, std::vector<MapPoint> matched_points2) 
+{
+  cv::Mat fi = cv::Mat(im1.rows, im1.cols * 2, CV_8UC3);
+  im1.copyTo(fi(cv::Rect(0, 0, im1.cols, im1.rows)));
+  im2.copyTo(fi(cv::Rect(im1.cols, 0, im2.cols, im2.rows)));
+  for (int i = 0; i < matched_points1.size(); i++) {
+    cv::circle(fi, matched_points1[i].keypoint.pt, 5, cv::Scalar(255, 0 ,0));
+    cv::circle(fi, matched_points2[i].keypoint.pt + cv::Point2f(1280, 0), 5, cv::Scalar(255, 0 ,0));
+    cv::line(fi, matched_points1[i].keypoint.pt, matched_points2[i].keypoint.pt + cv::Point2f(1280, 0), cv::Scalar(0, 255 ,0));
+  }
+  cv::imshow("ni", fi);
+  cv::waitKey(10);
+}
+
+cv::Mat 
+tr_vec_from_pose(cv::Mat pose)
+{
+  cv::Mat tr_vec(3, 1, CV_64F);
+  tr_vec.at<double>(0,0) = pose.at<double>(0,3);
+  tr_vec.at<double>(0,1) = pose.at<double>(1,3);
+  tr_vec.at<double>(0,2) = pose.at<double>(2,3);
+  return tr_vec;
+}
+
+cv::Mat 
+rot_mat_from_pose(cv::Mat pose)
+{
+  cv::Mat rot_mat(3, 3, CV_64F);
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      rot_mat.at<double>(row,col) = pose.at<double>(row, col);
+    }
+  }
+  cv::Rodrigues(rot_mat, rot_mat);
+  return rot_mat;
+}
+
+void 
+draw_cube_on_ref_sys(cv::Mat &image, 
+                     cv::Mat camera_matrix, 
+                     cv::Mat camera_dist, 
+                     cv::Mat pose, 
+                     uint side_lenght, 
+                     cv::Scalar color)
+{
+  cv::Mat tr_vec, rot_vec;
+  cv::Mat objectPoints (8,3,CV_32FC1);
+  cv::vector<cv::Point2f> imagePoints;
+  float halfSize = side_lenght / 2;
+  objectPoints.at<float>(0,0) = -halfSize;
+  objectPoints.at<float>(0,1) = -halfSize;
+  objectPoints.at<float>(0,2) = 0;
+  objectPoints.at<float>(1,0) = halfSize;
+  objectPoints.at<float>(1,1) = -halfSize;
+  objectPoints.at<float>(1,2) = 0;
+  objectPoints.at<float>(2,0) = halfSize;
+  objectPoints.at<float>(2,1) = halfSize;
+  objectPoints.at<float>(2,2) = 0;
+  objectPoints.at<float>(3,0) = -halfSize;
+  objectPoints.at<float>(3,1) = halfSize;
+  objectPoints.at<float>(3,2) = 0;
+  objectPoints.at<float>(4,0) = -halfSize;
+  objectPoints.at<float>(4,1) = -halfSize;
+  objectPoints.at<float>(4,2) = side_lenght;
+  objectPoints.at<float>(5,0) = halfSize;
+  objectPoints.at<float>(5,1) = -halfSize;
+  objectPoints.at<float>(5,2) = side_lenght;
+  objectPoints.at<float>(6,0) = halfSize;
+  objectPoints.at<float>(6,1) = halfSize;
+  objectPoints.at<float>(6,2) = side_lenght;
+  objectPoints.at<float>(7,0) = -halfSize;
+  objectPoints.at<float>(7,1) = halfSize;
+  objectPoints.at<float>(7,2) = side_lenght;
+  tr_vec = tr_vec_from_pose(pose);
+  rot_vec = rot_mat_from_pose(pose);
+  cv::projectPoints(objectPoints, rot_vec, tr_vec, camera_matrix, camera_dist, imagePoints);
+  for (int i=0;i<4;i++) { cv::line(image, imagePoints[i], imagePoints[(i+1)%4], color, 2, 8); }
+  for (int i=0;i<4;i++) { cv::line(image, imagePoints[i+4], imagePoints[4+(i+1)%4], color, 2, 8); }
+  for (int i=0;i<4;i++) { cv::line(image, imagePoints[i], imagePoints[i+4], color, 2, 8); }
+}
+
+
+/*std::cout << A << " --- " << B << std::endl;
+ cv::invert(A, X, cv::DECOMP_SVD);
+ cv::Mat res = X * B;
+ std::cout << X * B << std::endl;
+ double x1 = p11.x + res.at<double>(0,0) * p12.x - p11.x;
+ double y1 = p11.y + res.at<double>(0,0) * p12.y - p11.y;
+ double z1 = p11.z + res.at<double>(0,0) * p12.z - p11.z;
+ std::cout << x1 << " " << y1 << " " << z1 << std::endl;*/
+
+
+
+
 
