@@ -31,9 +31,9 @@ public:
         return camSize;
     }
     
-private:
     cv::Mat  cameraMatrix;
     cv::Mat  distorsion;
+private:
     cv::Size camSize;
 };
 

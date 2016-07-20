@@ -5,6 +5,7 @@
 #include <fstream>
 #include <stdint.h>
 #include <opencv2/opencv.hpp>
+#include "sys_conf.hpp"
 
 typedef struct 
 {
@@ -43,7 +44,13 @@ int  map__sector_for_coords(Map &map, cv::Point3f coords_3D);
 camera is viewing */
 Map  map__sectors_in_view(const Map &map, cv::Mat camera_pose);
 
-void map__draw(cv::Mat &frame_to_draw, const Map &map_to_draw, bool draw_grid = false);
+void map__draw(cv::Mat &frame_to_draw, 
+               const Map &map_to_draw, 
+               cv::Mat tr_vec, 
+               cv::Mat rot_vec, 
+               const cv::Mat camera_matrix, 
+               const cv::Mat camera_distorsion,
+               bool draw_grid = false);
 
 /* Write in the file the coords
 of the map points. If write_grid is true,

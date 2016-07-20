@@ -2,10 +2,14 @@
 #include <stdlib.h>
 #include "asvs.hpp"
 
+void (*test_ptr)(std::vector<int>);
+void map(cv::Mat frame);
 void test_map_system(std::vector<int> params);
 void test_map_and_pose_system(std::vector<int> params);
 void test_write_and_load_map(std::vector<int> params);
 void test_find_object(std::vector<int> params);
+void video_iterator(void (*test_ptr)(cv::VideoCapture capture, int count));
+
 
 std::string camera_path = "/Users/adda/Work/TDOR2/out_camera_data_iOS_720_3.yml";
 
@@ -22,15 +26,37 @@ main(int argc, char** argv)
   //test_find_object(params);
   return 0;
 }
+/*
+void 
+video_iterator(cv::VideoCapture capture, int count, void (*test_ptr)(std::vector<int>))
+{
+  for (int i = 0; i < count; i++) {
+    capture >> frame;
+    if (frame.cols == 0) { break; }
+    Marker m1 = marker_detector.detectMarker(frame);
+    if (m1.marker.size() == 0) { continue; } 
+    slam.map_update(frame, m1.marker[0].pose());
+  }
+}*/
 
 void 
 test_map_system(std::vector<int> params) 
 {
   cv::string video_path = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v";
-  SlamAPI helper = SlamAPI(camera_path);
+  MyMarkerDetector marker_detector = MyMarkerDetector(120.0, camera_path);
+  cv::Mat frame;
+  SlamAPI slam = SlamAPI(camera_path);
   cv::VideoCapture capture(video_path);
-  Map map = helper.slam_map(capture, params[1], params[2]);
-  map__write("map.txt", map, false);
+  slam.map_init();
+  slam.min_dist = (double)params[2];
+  for (int i = 0; i < params[1]; i++) {
+    capture >> frame;
+    if (frame.cols == 0) { break; }
+    Marker m1 = marker_detector.detectMarker(frame);
+    if (m1.marker.size() == 0) { continue; } 
+    slam.map_update(frame, m1.marker[0].pose());
+  }
+  slam.map_write_point_cloud("map.txt", true);
 }
 
 void 
@@ -38,15 +64,33 @@ test_map_and_pose_system(std::vector<int> params)
 {
   cv::string video_path = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v"; // 33
   cv::string video_path_test = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v"; // 34
-  SlamAPI helper = SlamAPI(camera_path);
+  cv::Mat estimated_pose;
+  MyMarkerDetector marker_detector = MyMarkerDetector(120.0, camera_path);
+  cv::Mat frame;
+  SlamAPI slam = SlamAPI(camera_path);
   cv::VideoCapture capture(video_path);
   cv::VideoCapture capture_test(video_path_test);
-  Map map = helper.slam_map(capture, params[1], params[3]);
-  //Map map = map__load_from_file("./maps/map_calc.txt");
-  //map__write("map.txt", map, true);
-  helper.slam_localize(capture_test, params[2], map);
+  slam.map_init();
+  slam.min_dist = (double)params[3];
+  for (int i = 0; i < params[1]; i++) {
+    capture >> frame;
+    printf("Progress map: %d / %d  map_points: %d \r", i, params[1], slam.map_point_size);
+    if (frame.cols == 0) { break; }
+    Marker m1 = marker_detector.detectMarker(frame);
+    if (m1.marker.size() == 0) { continue; } 
+    slam.map_update(frame, m1.marker[0].pose());
+  }
+  //slam.map_write_point_cloud("map.txt", true);
+  for (int i = 0; i < params[2]; i++) {
+    capture_test >> frame;
+    printf("Progress loc: %d / %d \r", i, params[2]);
+    if (frame.cols == 0) { break; }
+    slam.localize(frame, estimated_pose);
+    slam.visualize(frame, estimated_pose, true, false);
+  }
 }
 
+/*
 void 
 test_write_and_load_map(std::vector<int> params)
 {
@@ -70,7 +114,7 @@ test_find_object(std::vector<int> params)
   objects.push_back(object_map_bike);
   objects.push_back(object_map_calc);
   helper.slam_find_objects(capture_test, params[1], objects);
-}
+}*/
 
 // 1
 // DEVO FARE IL REFINING
@@ -82,9 +126,6 @@ test_find_object(std::vector<int> params)
 // Domani
 // -> Togliere parti hardcoded
 // -> Incrementare precisione, test senza punti del marker
-// -> Disegno feature attive / non attive
-// -> Marker 3d
-// -> Keypoint dovrebbero avere dentro un indice di qualità, guarda
 // -> Fine tuning parametri ORB
 
 

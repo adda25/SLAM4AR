@@ -16,7 +16,7 @@
 #include <string>
 #include <cstdint>
 #include <fstream>
-#include "/usr/local/include/eigen/Eigen/Dense"
+//#include "/usr/local/include/eigen/Eigen/Dense"
 #include "camera_param_reader.hpp"
 #include "map.hpp"
 
@@ -36,7 +36,9 @@ std::vector<MapPoint> slam__map(const SlamSystem &slam_sys,
                                 const cv::Mat &pose_1, 
                                 const cv::Mat &pose_2);
 
-cv::Mat slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image);
+cv::Mat slam__localize(const SlamSystem &slam_sys, 
+                       const Map &map, 
+                       cv::Mat &image);
 
 std::vector<cv::Rect> slam__find_objects(const SlamSystem &slam_sys, 
                                          std::vector<Map> objects_maps, 
@@ -57,6 +59,10 @@ void draw_cube_on_ref_sys(cv::Mat &image,
                           cv::Mat pose, 
                           uint side_lenght, 
                           cv::Scalar color); 
+
+// AUX
+cv::Mat tr_vec_from_pose(cv::Mat pose);
+cv::Mat rot_mat_from_pose(cv::Mat pose);
 
 class MapMatchFt_C 
 {

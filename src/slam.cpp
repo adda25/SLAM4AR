@@ -2,6 +2,7 @@
 
 struct SlamSystemPerformanceParams
 {
+  int accuracy_index = 20;
   double triangulation_relative_error = 0.002;
   int brief_patch_size = 32;
 } slam_sys_pfr_pr;
@@ -62,6 +63,8 @@ void  _slam__good_data_for_solvePnp(std::vector<MapMatchFt_C> &mapMatchFt,
                                     cv::vector<cv::Point3f> &obj_points_vector);
 void debug_loc(cv::Mat image, const Map &map, std::vector<cv::Point2f> current_im_points);
 void debug_pair(cv::Mat im1, cv::Mat im2, std::vector<MapPoint> matched_points1, std::vector<MapPoint> matched_points2);
+double matrix_norm(cv::Mat matrix);
+
 
 //////
 cv::Mat 
@@ -155,7 +158,8 @@ slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
   _slam__good_data_for_solvePnp(mapMatchFt, img_points_vector, obj_points_vector);
   if (img_points_vector.size() < 7) { return cv::Mat(4, 4, CV_64F, double(0)); }
   pose = slam__estimated_pose(img_points_vector, obj_points_vector, slam_sys.camera);
-  debug_loc(image, map, img_points_vector);
+  //debug_loc(image, map, img_points_vector);
+  //map__draw(image, map, tr_vec_from_pose(pose), rot_mat_from_pose(pose), slam_sys.camera.cameraMatrix, slam_sys.camera.distorsion);
   return pose;
 }
 
@@ -187,7 +191,7 @@ _slam__good_data_for_solvePnp(std::vector<MapMatchFt_C> &mapMatchFt,
   std::sort(mapMatchFt.begin(), mapMatchFt.end());
   while (true) {
     if (i == mapMatchFt.size()) { break; }
-    if ((mapMatchFt[i].accuracy_index > 20)) { break; }
+    if ((mapMatchFt[i].accuracy_index > slam_sys_pfr_pr.accuracy_index)) { break; }
     img_points_vector.push_back(mapMatchFt[i].new_found_ft_in_new_image.keypoint.pt);
     obj_points_vector.push_back(mapMatchFt[i].ref_match.coords_3D); 
     i++;
@@ -288,43 +292,6 @@ _slam__triangulate(cv::Mat image_1,
   return total_matches;
 }
 
-/*  A x = B  */
-/*std::vector<double> 
-_slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22) 
-{
-    cv::Mat A = cv::Mat(3, 2, CV_64F);
-    cv::Mat B = cv::Mat(3, 1, CV_64F);
-    cv::Mat X;
-    A.at<double>(0,0) = p12.x - p11.x; A.at<double>(0,1) = -p22.x + p21.x;
-    A.at<double>(1,0) = p12.y - p11.y; A.at<double>(1,1) = -p22.y + p21.y;
-    A.at<double>(2,0) = p12.z - p11.z; A.at<double>(2,1) = -p22.z + p21.z;
-    B.at<double>(0,0) = p21.x - p11.x;
-    B.at<double>(1,0) = p21.y - p11.y;
-    B.at<double>(2,0) = p21.z - p11.z;
-    Eigen::MatrixXd MA(3, 2);
-    Eigen::MatrixXd MB(3, 1);
-    for (int i = 0; i < 3; i++) {
-      for (int k = 0; k < 2; k++) { MA(i,k) = A.at<double>(i,k); }
-      MB(i,0) = B.at<double>(i,0);
-    }
-    Eigen::VectorXd x = MA.fullPivHouseholderQr().solve(MB);
-    double x1 = p11.x + x(0,0) * (p12.x - p11.x);
-    double y1 = p11.y + x(0,0) * (p12.y - p11.y);
-    double z1 = p11.z + x(0,0) * (p12.z - p11.z);
-    double x2 = p21.x + x(1,0) * (p22.x - p21.x);
-    double y2 = p21.y + x(1,0) * (p22.y - p21.y);
-    double z2 = p21.z + x(1,0) * (p22.z - p21.z);
-    std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
-    std::cout << "-------------------" << std::endl;
-    std::cout << MA << "#\n" << x << "#\n" << MB << std::endl;
-    double relative_error = (MA * x - MB).norm() / MB.norm(); 
-    if (relative_error > slam_sys_pfr_pr.triangulation_relative_error) { // 0.0002
-      sol[0] = -9999999;
-      return sol;
-    }
-    return sol;
-}*/
-
 double 
 matrix_norm(cv::Mat matrix)
 {
@@ -340,44 +307,39 @@ matrix_norm(cv::Mat matrix)
   }
   return max;
 }
-// A = 3x2  X = 2x1 B = 3x1
-// A * X =  3 * 1
 
+// A = 3x2  X = 2x1 B = 3x1
+// A * X = 3 * 1
 std::vector<double> 
 _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22) 
 {
-    cv::Mat A = cv::Mat(3, 2, CV_64F);
-    cv::Mat B = cv::Mat(3, 1, CV_64F);
-    cv::Mat X;
-    A.at<double>(0,0) = p12.x - p11.x; A.at<double>(0,1) = -p22.x + p21.x;
-    A.at<double>(1,0) = p12.y - p11.y; A.at<double>(1,1) = -p22.y + p21.y;
-    A.at<double>(2,0) = p12.z - p11.z; A.at<double>(2,1) = -p22.z + p21.z;
-    B.at<double>(0,0) = p21.x - p11.x;
-    B.at<double>(1,0) = p21.y - p11.y;
-    B.at<double>(2,0) = p21.z - p11.z;
-
-    cv::invert(A, X, cv::DECOMP_SVD);
-    cv::Mat res = X * B;
-    double x1 = p11.x + res.at<double>(0,0) * (p12.x - p11.x);
-    double y1 = p11.y + res.at<double>(0,0) * (p12.y - p11.y);
-    double z1 = p11.z + res.at<double>(0,0) * (p12.z - p11.z);
-    double x2 = p21.x + res.at<double>(0,1) * (p22.x - p21.x);
-    double y2 = p21.y + res.at<double>(0,1) * (p22.y - p21.y);
-    double z2 = p21.z + res.at<double>(0,1) * (p22.z - p21.z);
-    
-    cv::Mat xx = cv::Mat(2,1,CV_64F);
-    xx.at<double>(0,0) = res.at<double>(0,0);
-    xx.at<double>(1,0) = res.at<double>(0,1);
-
-    std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
-
-    double relative_error = matrix_norm(A * xx - B) / matrix_norm(B);
-    //std::cout << relative_error << std::endl; 
-    if (relative_error > 0.002) { // 0.0002
-      sol[0] = -9999999;
-      return sol;
-    }
+  cv::Mat A = cv::Mat(3, 2, CV_64F);
+  cv::Mat B = cv::Mat(3, 1, CV_64F);
+  cv::Mat X;
+  A.at<double>(0,0) = p12.x - p11.x; A.at<double>(0,1) = -p22.x + p21.x;
+  A.at<double>(1,0) = p12.y - p11.y; A.at<double>(1,1) = -p22.y + p21.y;
+  A.at<double>(2,0) = p12.z - p11.z; A.at<double>(2,1) = -p22.z + p21.z;
+  B.at<double>(0,0) = p21.x - p11.x;
+  B.at<double>(1,0) = p21.y - p11.y;
+  B.at<double>(2,0) = p21.z - p11.z;
+  cv::invert(A, X, cv::DECOMP_SVD);
+  cv::Mat res = X * B;
+  double x1 = p11.x + res.at<double>(0,0) * (p12.x - p11.x);
+  double y1 = p11.y + res.at<double>(0,0) * (p12.y - p11.y);
+  double z1 = p11.z + res.at<double>(0,0) * (p12.z - p11.z);
+  double x2 = p21.x + res.at<double>(0,1) * (p22.x - p21.x);
+  double y2 = p21.y + res.at<double>(0,1) * (p22.y - p21.y);
+  double z2 = p21.z + res.at<double>(0,1) * (p22.z - p21.z);
+  cv::Mat xx = cv::Mat(2,1,CV_64F);
+  xx.at<double>(0,0) = res.at<double>(0,0);
+  xx.at<double>(1,0) = res.at<double>(0,1);
+  std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
+  double relative_error = matrix_norm(A * xx - B) / matrix_norm(B);
+  if (relative_error > slam_sys_pfr_pr.triangulation_relative_error) { // 0.0002
+    sol[0] = -9999999;
     return sol;
+  }
+  return sol;
 }
 
 std::vector<MapMatchFt_C>
@@ -587,6 +549,47 @@ draw_cube_on_ref_sys(cv::Mat &image,
 
 
 
+
+
+
+
+// OLD Eigen Triangulation
+/*  A x = B  */
+/*std::vector<double> 
+_slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22) 
+{
+    cv::Mat A = cv::Mat(3, 2, CV_64F);
+    cv::Mat B = cv::Mat(3, 1, CV_64F);
+    cv::Mat X;
+    A.at<double>(0,0) = p12.x - p11.x; A.at<double>(0,1) = -p22.x + p21.x;
+    A.at<double>(1,0) = p12.y - p11.y; A.at<double>(1,1) = -p22.y + p21.y;
+    A.at<double>(2,0) = p12.z - p11.z; A.at<double>(2,1) = -p22.z + p21.z;
+    B.at<double>(0,0) = p21.x - p11.x;
+    B.at<double>(1,0) = p21.y - p11.y;
+    B.at<double>(2,0) = p21.z - p11.z;
+    Eigen::MatrixXd MA(3, 2);
+    Eigen::MatrixXd MB(3, 1);
+    for (int i = 0; i < 3; i++) {
+      for (int k = 0; k < 2; k++) { MA(i,k) = A.at<double>(i,k); }
+      MB(i,0) = B.at<double>(i,0);
+    }
+    Eigen::VectorXd x = MA.fullPivHouseholderQr().solve(MB);
+    double x1 = p11.x + x(0,0) * (p12.x - p11.x);
+    double y1 = p11.y + x(0,0) * (p12.y - p11.y);
+    double z1 = p11.z + x(0,0) * (p12.z - p11.z);
+    double x2 = p21.x + x(1,0) * (p22.x - p21.x);
+    double y2 = p21.y + x(1,0) * (p22.y - p21.y);
+    double z2 = p21.z + x(1,0) * (p22.z - p21.z);
+    std::vector<double> sol = {x1, y1, z1, x2, y2, z2};
+    std::cout << "-------------------" << std::endl;
+    std::cout << MA << "#\n" << x << "#\n" << MB << std::endl;
+    double relative_error = (MA * x - MB).norm() / MB.norm(); 
+    if (relative_error > slam_sys_pfr_pr.triangulation_relative_error) { // 0.0002
+      sol[0] = -9999999;
+      return sol;
+    }
+    return sol;
+}*/
 
 
 

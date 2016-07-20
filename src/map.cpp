@@ -220,12 +220,33 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
 }
 
 void 
-map__draw(cv::Mat &frame_to_draw, const Map &map_to_draw, bool draw_grid) {
-  
+map__draw(cv::Mat &frame_to_draw, 
+          const Map &map_to_draw, 
+          cv::Mat tr_vec, 
+          cv::Mat rot_vec, 
+          const cv::Mat camera_matrix, 
+          const cv::Mat camera_distorsion,
+          bool draw_grid)
+{
+  std::vector<cv::Point2f> output_points;
+  std::vector<MapPoint> me_map;
+  std::vector<cv::Point2f> image;
+  std::vector<cv::Point3f> object_points;
+  map__merge(map_to_draw, me_map);
+  for (auto &m : me_map) {
+    object_points.push_back(m.coords_3D);
+  }
+  cv::projectPoints(object_points, rot_vec, 
+                    tr_vec, camera_matrix, 
+                    camera_distorsion, output_points); 
+  for (auto &p : output_points) {
+    cv::circle(frame_to_draw, p, 5, cv::Scalar(0,0,255,255));
+  }
 }
 
 void 
-map__write(std::string filename, const Map &map_to_write, bool write_grid) {
+map__write(std::string filename, const Map &map_to_write, bool write_grid) 
+{
   std::ofstream ofs;
   ofs.open (filename, std::ofstream::trunc);
   if (write_grid) {
