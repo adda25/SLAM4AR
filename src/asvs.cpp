@@ -25,9 +25,23 @@ SlamAPI::map_init()
 }
 
 void 
-SlamAPI::map_update(cv::Mat &frame)
+SlamAPI::map_update(cv::Mat &frame, cv::Mat pose, int kk = 0)
 {
-// TODO  
+  static int state = 0;
+  static uint frame_counter = 0;  
+  static cv::Mat image_1, pose_1;
+  if (state == 0) {
+    pose.copyTo(pose_1);
+    frame.copyTo(image_1);
+    state = 1;
+    return;
+  } else if (frame_counter == 100) {
+    frame_counter = 0;
+    slam__map(slam_sys, image_1, frame);
+    std::cout << "Real diff: " << pose_1 * pose.inv() << std::endl;
+    state = 0;
+  }
+  frame_counter++;
 }
 
 void 
@@ -109,6 +123,11 @@ SlamAPI::localize_object(cv::Mat &frame, const Map &object_map, std::vector<cv::
   std::vector<Map> objects_maps;
   objects_maps.push_back(map);
   objects_rects = slam__find_objects(slam_sys, objects_maps, frame);
+  for (auto &r : objects_rects) {
+    cv::rectangle(frame, r, cv::Scalar(0,0,255,255));
+  }
+  cv::imshow("find_objects", frame);
+  cv::waitKey(10);
 }
 
 void 
@@ -258,9 +277,43 @@ SlamAPI::slam_find_objects(cv::VideoCapture capture, int count_test, std::vector
   } 
 }
 */
-
-
-
+/*
+void 
+SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
+{
+  static cv::Mat image_1;
+  static cv::Mat pose_1;
+  static std::future<void> future_thread;
+  static bool future_launched = false;
+  static int state = 0;
+  if (state == 0) {
+    frame.copyTo(image_1);
+    pose.copyTo(pose_1);
+    state = 1;
+    return;
+  } 
+  double distance = 0.0;
+  calc_distance(tr_vec_from_pose(pose_1), tr_vec_from_pose(pose), distance);
+  if (distance < min_dist) { return; }
+  if (future_launched) {
+    future_thread.get();
+    future_launched = false;
+  }
+  //std::cout << "LAUNCH THREAD\n";
+  future_thread = std::async(std::launch::async, slam_map_update_w_thread, slam_sys, image_1, frame, pose_1, pose, std::ref(map), std::ref(map_point_size));
+  future_launched = true;
+  //std::cout << "AFTER THREAD\n";
+  /*std::vector<MapPoint> kf_map = slam__map(slam_sys, 
+                                           image_1, 
+                                           frame, 
+                                           pose_1, 
+                                           pose);
+  map_point_size += kf_map.size();
+  map__update(map, kf_map, pose, frame);
+  //r.get();
+  state = 0;
+}
+*/
 
 
 

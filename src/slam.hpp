@@ -11,12 +11,14 @@
 #include <iostream>
 #include <vector>
 #include <opencv2/opencv.hpp>
-#include <opencv2/nonfree/features2d.hpp>
+//#include <opencv2/nonfree/features2d.hpp>
+#include "opencv2/core/version.hpp"
 #include <chrono>
 #include <string>
 #include <cstdint>
 #include <fstream>
-//#include "/usr/local/include/eigen/Eigen/Dense"
+#include <future>
+#include <thread>
 #include "camera_param_reader.hpp"
 #include "map.hpp"
 
@@ -29,6 +31,8 @@ typedef struct
 
 
 void slam__init(SlamSystem &slam_sys, const std::string camera_path);
+
+void slam__map(const SlamSystem &slam_sys, cv::Mat image_1, cv::Mat image_2);
 
 std::vector<MapPoint> slam__map(const SlamSystem &slam_sys, 
                                 cv::Mat &image_1, 
@@ -49,8 +53,8 @@ cv::Mat slam_localize_and_update(const SlamSystem &slam_sys, Map &map, cv::Mat &
 //
 
 cv::Mat slam__estimated_pose(std::vector<MapPoint> matches, MyCamereParamReader camera); 
-cv::Mat slam__estimated_pose(cv::vector<cv::Point2f> img_points_vector, 
-                             cv::vector<cv::Point3f> obj_points_vector, 
+cv::Mat slam__estimated_pose(std::vector<cv::Point2f> img_points_vector, 
+                             std::vector<cv::Point3f> obj_points_vector, 
                              MyCamereParamReader camera); 
 
 void draw_cube_on_ref_sys(cv::Mat &image, 
