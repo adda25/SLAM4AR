@@ -297,8 +297,8 @@ map__image_points_for_pose(const Map &map,
 { 
   for (auto &m : map) {
     for (auto &p : m.sector_points) {
-      cv::vector<cv::Point2f> im_pt;
-      cv::vector<cv::Point3f> p_vec;
+      std::vector<cv::Point2f> im_pt;
+      std::vector<cv::Point3f> p_vec;
       MapPoint nmp = p;
       p_vec.push_back(p.coords_3D);
       cv::projectPoints(p_vec, current_rot, current_tr, 

@@ -136,8 +136,8 @@ inline void
 MyMarkerDetector::getMarkerPose(MarkerData& m, cv::Mat& trVec, cv::Mat& rotVec) {
     cv::Mat raux, taux;
     cv::Mat rVecTest, tVecTest;
-    cv::vector<cv::Point2f> imgPointsVector;
-    cv::vector<cv::Point3f> objPointsVector;
+    std::vector<cv::Point2f> imgPointsVector;
+    std::vector<cv::Point3f> objPointsVector;
     ty_d1 halfSize = m.markerSize * 0.5;
     bool find = false;
     
@@ -235,7 +235,7 @@ int analyzeMarkerImage(Mat &grey,int &nRotations)
     }
     
     //now,
-    vector<int> markerInfo(5);
+    std::vector<int> markerInfo(5);
     Mat _bits=Mat::zeros(5,5,CV_8UC1);
     //get information(for each inner square, determine if it is  black or white)
     

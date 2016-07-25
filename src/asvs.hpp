@@ -24,7 +24,7 @@ public:
 
   /* Compute the map using the
   5 point algorithm  */
-  void map_update(cv::Mat &frame, cv::Mat pose, int kk);
+  //void map_update(cv::Mat &frame, cv::Mat pose, int kk);
 
   /* Compute the map given the pose
   of the current frame */
@@ -42,6 +42,7 @@ public:
   void map_load(std::string filename, Map &map_to_load);
 
   void localize(cv::Mat &frame, cv::Mat &estimated_pose);
+  void localize_and_update(cv::Mat &frame, cv::Mat &estimated_pose);
   void localize_object(cv::Mat &frame, const Map &object_map, std::vector<cv::Rect> &objects_rects); 
     
   void visualize(cv::Mat &frame, cv::Mat &pose, bool draw_map, bool draw_sr);
@@ -54,6 +55,7 @@ private:
   
 
 };
+
 /*
 class SlamAPI
 {

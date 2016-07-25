@@ -22,74 +22,6 @@ measure_chrono(mtime start_time,
   std::cout << mex << " " << time_span.count() << " seconds." << std::endl;
 }
 
- bool 
- CheckCoherentRotation(cv::Mat_<float>& R) {
-  if(fabsf(determinant(R))-1.0 > 1e-07) {
-      std::cerr << "det(R) != +-1.0, this is not a rotation matrix" << std::endl;
-      return false;
-  }
-  return true;
-}
-
-
-cv::Mat_<float> 
-LinearLSTriangulation(cv::Point3d u,  //homogenous image point (u,v,1)
-                      cv::Matx34d P,  //camera 1 matrix
-                      cv::Point3d u1, //homogenous image point in 2nd camera
-                      cv::Matx34d P1) //camera 2 matrix
-{
-  //build A matrix
-  cv::Matx43f A(u.x*P(2,0)-P(0,0),u.x*P(2,1)-P(0,1),u.x*P(2,2)-P(0,2),
-  u.y*P(2,0)-P(1,0),u.y*P(2,1)-P(1,1),u.y*P(2,2)-P(1,2),
-  u1.x*P1(2,0)-P1(0,0), u1.x*P1(2,1)-P1(0,1),u1.x*P1(2,2)-P1(0,2),
-  u1.y*P1(2,0)-P1(1,0), u1.y*P1(2,1)-P1(1,1),u1.y*P1(2,2)-P1(1,2)
-    );
-  //build B vector
-  cv::Matx41f B(-(u.x*P(2,3)-P(0,3)),
-    -(u.y*P(2,3)-P(1,3)),
-    -(u1.x*P1(2,3)-P1(0,3)),
-    -(u1.y*P1(2,3)-P1(1,3)));
-   //solve for X
-  cv::Mat_<float> X;
-  cv::solve(A, B, X, cv::DECOMP_SVD);
-return X; 
-}
-
-double 
-TriangulatePoints(const std::vector<cv::KeyPoint> &pt_set1,
-                  const std::vector<cv::KeyPoint> &pt_set2,
-                  const cv::Mat &Kinv,
-                  const cv::Matx34f &P,
-                  const cv::Matx34f &P1,
-                  std::vector<cv::Point3d> &pointcloud)
-{
-  std::vector<double> reproj_error;
-  for (unsigned int i=0; i<pt_set1.size(); i++) {
-    //convert to normalized homogeneous coordinates
-    cv::Point2f kp = pt_set1[i].pt;
-    cv::Point3d u(kp.x,kp.y,1.0);
-    cv::Mat_<float> um = Kinv * cv::Mat_<float>(u);
-    u = um.at<cv::Point3d>(0);
-    cv::Point2f kp1 = pt_set2[i].pt;
-    cv::Point3d u1(kp1.x,kp1.y,1.0);
-    cv::Mat_<float> um1 = Kinv *cv:: Mat_<float>(u1);
-    u1 = um1.at<cv::Point3d>(0);
-    //triangulate
-    cv::Mat_<float> X = LinearLSTriangulation(u, P, u1, P1);
-    //calculate reprojection error
-    std::cout << Kinv.rows << " " << Kinv.cols << " " << cv::Mat(P1).rows << " " << cv::Mat(P1).cols << " " << X.rows << X.cols << std::endl;
-    std::cout << X << std::endl;
-    //cv::Mat_<float> xPt_img = Kinv * cv::Mat(P1) * X; //K * cv::Mat(P1) * X;
-    //cv::Point2f xPt_img_(xPt_img(0) / xPt_img(2), xPt_img(1) / xPt_img(2));
-    //reproj_error.push_back(cv::norm(xPt_img_-kp1));
-    //store 3D point
-    pointcloud.push_back(cv::Point3d(X(0),X(1),X(2)));
-  }
-  //return mean reprojection error
-  cv::Scalar me = cv::mean(reproj_error);
-  return me[0];
-}
-
 // 1080p
 /*
 cv::Mat 
@@ -122,6 +54,10 @@ std::vector<MapPoint> _slam__triangulate(cv::Mat image_1,
                                          cv::Mat pose1, 
                                          std::vector<MapPoint> matched_points2, 
                                          cv::Mat pose2);
+std::vector<MapPoint> _slam__triangulate(cv::Mat image_1, 
+                                         std::vector<MapPoint> matched_points1, 
+                                         std::vector<MapPoint> matched_points2, 
+                                         cv::Mat from1to2);
 std::vector<double> _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22); 
 cv::Rect _slam__detect_screen_region_for_map(const SlamSystem &slam_sys, const Map &obj_map, cv::Mat &image);
 cv::Point3f match_position_in_marker_frame(cv::Mat camera_pose, cv::Point3d p_solution);
@@ -134,9 +70,8 @@ void  _slam__good_data_for_solvePnp(std::vector<MapMatchFt_C> &mapMatchFt,
 void debug_loc(cv::Mat image, const Map &map, std::vector<cv::Point2f> current_im_points);
 void debug_pair(cv::Mat im1, cv::Mat im2, std::vector<MapPoint> matched_points1, std::vector<MapPoint> matched_points2);
 double matrix_norm(cv::Mat matrix);
+cv::Mat pose_mat_from_tr_and_rot(cv::Mat tr_mat, cv::Mat rot_mat);
 
-
-//////
 cv::Mat 
 cam_point_from_pixel(cv::Point2f point, double z) 
 {
@@ -172,26 +107,47 @@ rot_tr_mat(cv::Mat rot, cv::Mat tr)
 void 
 slam__init(SlamSystem &slam_sys, const std::string camera_path) 
 {
-
-#if CV_MAJOR_VERSION == 2
- std::cout << "Opencv 2" << std::endl;
-#elif CV_MAJOR_VERSION == 3
- std::cout << "Opencv 3" << std::endl;
-#endif
-  slam_sys.features_detector = cv::ORB::create(); /*cv::FeatureDetector(4000, 
-                                                          1.12f, 
-                                                          8, 
-                                                          31, 
-                                                          0, 
-                                                          2, 
-                                                          cv::ORB::HARRIS_SCORE, 
-                                                          31);*/
-  slam_sys.descriptions_extractor = new cv::OrbDescriptorExtractor();
+  #if CV_MAJOR_VERSION == 2
+  slam_sys.features_detector = cv::FeatureDetector(4000, 
+                                                   1.12f, 
+                                                   8, 
+                                                   31, 
+                                                   0, 
+                                                   2, 
+                                                   cv::ORB::HARRIS_SCORE, 
+                                                   31); 
+  slam_sys.descriptions_extractor = cv::DescriptorExtractor(4000, 
+                                                            1.12f, 
+                                                            8, 
+                                                            31, 
+                                                            0, 
+                                                            2, 
+                                                            cv::ORB::HARRIS_SCORE, 
+                                                            31);
+  #elif CV_MAJOR_VERSION == 3
+  slam_sys.features_detector = cv::ORB::create(4000, 
+                                               1.12f, 
+                                               8, 
+                                               31, 
+                                               0, 
+                                               2, 
+                                               cv::ORB::HARRIS_SCORE, 
+                                               31); 
+  slam_sys.descriptions_extractor = cv::ORB::create(4000, 
+                                                    1.12f, 
+                                                    8, 
+                                                    31, 
+                                                    0, 
+                                                    2, 
+                                                    cv::ORB::HARRIS_SCORE, 
+                                                    31);
+  #endif
   slam_sys.camera = MyCamereParamReader();
   slam_sys.camera.readFromXMLFile(camera_path);
 }
 
-void 
+#if CV_MAJOR_VERSION == 3
+std::vector<MapPoint> 
 slam__map(const SlamSystem &slam_sys, cv::Mat image_1, cv::Mat image_2)
 {
   std::vector<MapPoint> matched_points1, matched_points2;
@@ -222,44 +178,23 @@ slam__map(const SlamSystem &slam_sys, cv::Mat image_1, cv::Mat image_2)
     im_points_2.push_back(m2.keypoint.pt); 
     ok2.push_back(m2.keypoint);
   } 
-  cv::Mat essential_matrix = findEssentialMat(im_points_1, im_points_2, 1.0, cv::Point2d(0, 0));
-  // Essential matrix
-  /*cv::Mat ess_mask_out;
-  cv::Mat foundamental_matrix_32;
-  cv::Mat foundamental_matrix_64 = cv::findFundamentalMat(im_points_1, im_points_2, CV_RANSAC, 3, 0.99, ess_mask_out);
-  foundamental_matrix_64.convertTo( foundamental_matrix_32, CV_32FC1 );
-  cv::Mat essential_matrix = slam_sys.camera.cameraMatrix.t() * foundamental_matrix_32 * slam_sys.camera.cameraMatrix;
+  cv::Mat rot_mat;
+  cv::Mat tr_mat;
   
-  cv::SVD svd = cv::SVD(essential_matrix);
-  cv::Matx33f W(0,-1,0,1,0,0,0,0,1);
-  cv::Mat_<float> R = svd.u * cv::Mat(W) * svd.vt; //HZ 9.19
-  cv::Mat_<float> t = svd.u.col(2); //u3
+  cv::Mat essential_matrix = findEssentialMat(im_points_1, im_points_2, 1152, cv::Point2d(0, 0));
+  int inliner = cv::recoverPose(essential_matrix, im_points_1, im_points_2, rot_mat, tr_mat);
+  cv::Mat pose_2_to_1 = pose_mat_from_tr_and_rot(tr_mat, rot_mat);
 
-  if (!CheckCoherentRotation(R)) { return; };
+  cv::Mat mtxR, mtxQ;
+  cv::Mat Qx, Qy, Qz;
+  cv::Vec3d angles = RQDecomp3x3(rot_mat, mtxR, mtxQ, Qx, Qy, Qz);
+  std::cout << "Translation: " << tr_mat.t() << std::endl;
+  std::cout << "Euler angles [x y z] in degrees: " << angles.t() << std::endl;
   
-  cv::Matx34f P(1,0,0,0, 0,1,0,0, 0,0,1,0);
-  cv::Matx34f P1(R(0,0),R(0,1),R(0,2),t(0),
-                 R(1,0),R(1,1),R(1,2),t(1),
-                 R(2,0),R(2,1),R(2,2),t(2));
-
-  cv::Mat cam_matrix;
-  cam_matrix = slam_sys.camera.cameraMatrix.inv();
-  cam_matrix.convertTo(cam_matrix,CV_32F); 
-  std::vector<cv::Point3d> point_cloud;
-  double rel_err = TriangulatePoints(ok1,
-                  ok2,
-                  cam_matrix,
-                  P,
-                  P1,
-                  point_cloud);
-  
-  std::ofstream ofs;
-  ofs.open ("test_map_tr.txt", std::ofstream::app);
-  for (auto &p : point_cloud) {
-    ofs << p.x << " " << p.y << " " << p.z << " " << 0 << " " << 255 << " " << 0 << "\n";
-  }
-  ofs.close();*/
+  std::vector<MapPoint> total_matches = _slam__triangulate(image_1, matched_points1, matched_points2, pose_2_to_1); 
+  return total_matches;
 }
+#endif
 
 std::vector<MapPoint> 
 slam__map(const SlamSystem &slam_sys, 
@@ -268,75 +203,74 @@ slam__map(const SlamSystem &slam_sys,
           const cv::Mat &pose_1, 
           const cv::Mat &pose_2)
 {
-  std::cout << "-------------\n";
+  //std::cout << "-------------\n";
   std::vector<MapPoint> matched_points1;
   std::vector<MapPoint> matched_points2;
-  mtime tsf = get_chrono();
+  //mtime tsf = get_chrono();
   std::future<std::vector<cv::KeyPoint>> sf1 = std::async(std::launch::async, _slam__search_features, slam_sys, image_1);
   std::future<std::vector<cv::KeyPoint>> sf2 = std::async(std::launch::async, _slam__search_features, slam_sys, image_2);
   std::vector<cv::KeyPoint> keypoints1 = sf1.get();//_slam__search_features(slam_sys, image_1);
   std::vector<cv::KeyPoint> keypoints2 = sf2.get();//_slam__search_features(slam_sys, image_2);
-  measure_chrono(tsf, "Time search features");
-  mtime td = get_chrono();
+  //measure_chrono(tsf, "Time search features");
+  //mtime td = get_chrono();
   std::future<cv::Mat> df1 = std::async(std::launch::async, _slam__extract_descriptors, slam_sys, image_1, keypoints1);
   std::future<cv::Mat> df2 = std::async(std::launch::async, _slam__extract_descriptors, slam_sys, image_2, keypoints2);
   cv::Mat descriptors1 = df1.get();//_slam__extract_descriptors(slam_sys, image_1, keypoints1);
   cv::Mat descriptors2 = df2.get();//_slam__extract_descriptors(slam_sys, image_2, keypoints2);
-  measure_chrono(td, "Time extract descriptors");
-  mtime tma = get_chrono();
+  //measure_chrono(td, "Time extract descriptors");
+  //mtime tma = get_chrono();
   std::vector<cv::DMatch> matches = _slam__match_features(descriptors1, descriptors2, cv::NORM_L1); // cv::NORM_HAMMING
-  measure_chrono(tma, "Time match");
-  mtime tsm = get_chrono();
+  //measure_chrono(tma, "Time match");
+  //mtime tsm = get_chrono();
   _slam__split_matches(matches, keypoints1, descriptors1, keypoints2, descriptors2, matched_points1, matched_points2, true);
-  measure_chrono(tsm, "Time split");
+  //measure_chrono(tsm, "Time split");
   //debug_pair(image_1, image_2, matched_points1, matched_points2);
-  mtime tt = get_chrono();
+  //mtime tt = get_chrono();
   std::vector<MapPoint> total_matches = _slam__triangulate(image_1, matched_points1, pose_1, matched_points2, pose_2);  
-  measure_chrono(tt, "Time triang");
+ // measure_chrono(tt, "Time triang");
   return total_matches;
 }
 
 cv::Mat 
 slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
 {
-  std::cout << "***************\n";
+  //std::cout << "***************\n";
   std::vector<cv::KeyPoint> old_keypoints;
   std::vector<MapPoint> matched_points1;
   std::vector<MapPoint> matched_points2;
-  cv::vector<cv::Point2f> img_points_vector;
-  cv::vector<cv::Point3f> obj_points_vector;
+  std::vector<cv::Point2f> img_points_vector;
+  std::vector<cv::Point3f> obj_points_vector;
   cv::Mat pose;
   cv::Mat old_descriptors = cv::Mat(0, slam_sys_pfr_pr.brief_patch_size, CV_8U);
   std::vector<cv::DMatch> new_matches;
   std::vector<cv::KeyPoint> keypoints;
   cv::Mat descriptors;
   std::vector<MapMatchFt_C> mapMatchFt;
-  mtime tsf = get_chrono();
+  //mtime tsf = get_chrono();
   keypoints = _slam__search_features(slam_sys, image);
-  measure_chrono(tsf, "Time search features");
-  mtime td = get_chrono();
+  //measure_chrono(tsf, "Time search features");
+  //mtime td = get_chrono();
   descriptors = _slam__extract_descriptors(slam_sys, image, keypoints);
-  measure_chrono(td, "Time extract descriptors");
-  mtime mk = get_chrono();
+  //measure_chrono(td, "Time extract descriptors");
+  //mtime mk = get_chrono();
   map__merge_keypoints_and_descriptors(map, old_keypoints, old_descriptors);
-  measure_chrono(mk, "Time merge");
-  mtime tma = get_chrono();
+  //measure_chrono(mk, "Time merge");
+  //mtime tma = get_chrono();
   new_matches = _slam__match_features(old_descriptors, descriptors, cv::NORM_L1); // cv::NORM_HAMMING
-  measure_chrono(tma, "Time match");
-  mtime tsm = get_chrono();
+  //measure_chrono(tma, "Time match");
+  //mtime tsm = get_chrono();
   _slam__split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
-  measure_chrono(tsm, "Time split");
-  mtime tp2p = get_chrono();
+  //measure_chrono(tsm, "Time split");
+  //mtime tp2p = get_chrono();
   mapMatchFt = _slam__find_p2p_correspondence(map, matched_points1, matched_points2);
-  measure_chrono(tp2p, "Time p2p");
-  mtime tgsp = get_chrono();
+  //measure_chrono(tp2p, "Time p2p");
+  //mtime tgsp = get_chrono();
   _slam__good_data_for_solvePnp(mapMatchFt, img_points_vector, obj_points_vector);
-  measure_chrono(tgsp, "Time good data spnp");
-  
+  //measure_chrono(tgsp, "Time good data spnp");
   if (img_points_vector.size() < 7) { return cv::Mat(4, 4, CV_64F, double(0)); }
-  mtime tpose = get_chrono();
+  //mtime tpose = get_chrono();
   pose = slam__estimated_pose(img_points_vector, obj_points_vector, slam_sys.camera);
-  measure_chrono(tpose, "Time pose");
+  //measure_chrono(tpose, "Time pose");
   //debug_loc(image, map, img_points_vector);
   //map__draw(image, map, tr_vec_from_pose(pose), rot_mat_from_pose(pose), slam_sys.camera.cameraMatrix, slam_sys.camera.distorsion);
   return pose;
@@ -354,17 +288,10 @@ slam__find_objects(const SlamSystem &slam_sys,
   return obj_windows;
 }
 
-cv::Mat 
-slam_localize_and_update(const SlamSystem &slam_sys, Map &map, cv::Mat &image) 
-{
-  cv::Mat pose;
-  return pose; 
-}
-
 void 
 _slam__good_data_for_solvePnp(std::vector<MapMatchFt_C> &mapMatchFt,
-                              cv::vector<cv::Point2f>   &img_points_vector,
-                              cv::vector<cv::Point3f>   &obj_points_vector)
+                              std::vector<cv::Point2f>  &img_points_vector,
+                              std::vector<cv::Point3f>  &obj_points_vector)
 {
   int i = 0; 
   std::sort(mapMatchFt.begin(), mapMatchFt.end());
@@ -471,6 +398,34 @@ _slam__triangulate(cv::Mat image_1,
   return total_matches;
 }
 
+std::vector<MapPoint>     
+_slam__triangulate(cv::Mat image_1, 
+                   std::vector<MapPoint> matched_points1, 
+                   std::vector<MapPoint> matched_points2, 
+                   cv::Mat from1to2)
+{
+  std::vector<MapPoint> total_matches;
+  for (int gm = 0; gm < matched_points1.size(); gm++) {
+    cv::Mat cam_points_11 = cam_point_from_pixel(matched_points1[gm].keypoint.pt, 100);
+    cv::Mat cam_points_12 = cam_point_from_pixel(matched_points1[gm].keypoint.pt, 20000);
+    cv::Mat cam_points_21 = cam_point_from_pixel(matched_points2[gm].keypoint.pt, 100);
+    cv::Mat cam_points_22 = cam_point_from_pixel(matched_points2[gm].keypoint.pt, 20000);
+    cam_points_21   = from1to2 * cam_points_21;
+    cam_points_22   = from1to2 * cam_points_22;
+    cv::Point3f p11 = cv::Point3f(cam_points_11.at<double>(0,0), cam_points_11.at<double>(1,0), cam_points_11.at<double>(2,0));
+    cv::Point3f p12 = cv::Point3f(cam_points_12.at<double>(0,0), cam_points_12.at<double>(1,0), cam_points_12.at<double>(2,0));
+    cv::Point3f p21 = cv::Point3f(cam_points_21.at<double>(0,0), cam_points_21.at<double>(1,0), cam_points_21.at<double>(2,0));
+    cv::Point3f p22 = cv::Point3f(cam_points_22.at<double>(0,0), cam_points_22.at<double>(1,0), cam_points_22.at<double>(2,0));        
+    std::vector<double> solution = _slam__solve_linear_system(p11, p12, p21, p22);
+    if (solution[0] < -9999998) { continue; } 
+    matched_points2[gm].coords_3D = match_position_in_marker_frame(from1to2.inv(), cv::Point3d(solution[3], solution[4], solution[5]));
+    matched_points2[gm].hits++;
+    //matched_points2[gm].pixel_colors()
+    total_matches.push_back(matched_points2[gm]);
+  }
+  return total_matches;
+}
+
 double 
 matrix_norm(cv::Mat matrix)
 {
@@ -549,8 +504,8 @@ _slam__detect_screen_region_for_map(const SlamSystem &slam_sys, const Map &obj_m
   std::vector<cv::KeyPoint> old_keypoints;
   std::vector<MapPoint> matched_points1;
   std::vector<MapPoint> matched_points2;
-  cv::vector<cv::Point2f> img_points_vector;
-  cv::vector<cv::Point3f> obj_points_vector;
+  std::vector<cv::Point2f> img_points_vector;
+  std::vector<cv::Point3f> obj_points_vector;
   cv::Mat pose;
   cv::Mat old_descriptors = cv::Mat(0, slam_sys_pfr_pr.brief_patch_size, CV_8U);
   std::vector<cv::DMatch> new_matches;
@@ -569,7 +524,6 @@ _slam__detect_screen_region_for_map(const SlamSystem &slam_sys, const Map &obj_m
   if (mapMatchFt.size() > 50) {
     for (auto &mmf : mapMatchFt) {
       if (mmf.accuracy_index > 20) { continue; }
-
       coord.x += mmf.new_found_ft_in_new_image.keypoint.pt.x;
       coord.y += mmf.new_found_ft_in_new_image.keypoint.pt.y;
       counter++;
@@ -599,8 +553,8 @@ slam__estimated_pose(std::vector<MapPoint> matches, MyCamereParamReader camera)
 {
   cv::Mat pose;
   cv::Mat rVec, tVec, rot_mat;
-  cv::vector<cv::Point2f> img_points_vector;
-  cv::vector<cv::Point3f> obj_points_vector;
+  std::vector<cv::Point2f> img_points_vector;
+  std::vector<cv::Point3f> obj_points_vector;
   for (auto &m : matches) {
     obj_points_vector.push_back(m.coords_3D);
     img_points_vector.push_back(m.keypoint.pt);
@@ -624,12 +578,12 @@ slam__estimated_pose(std::vector<cv::Point2f> img_points_vector,
 {
   cv::Mat pose;
   cv::Mat rVec, tVec, rot_mat;
-  cv::solvePnPRansac(obj_points_vector, 
+  cv::solvePnP(obj_points_vector, 
                img_points_vector, 
                camera.getCameraMatrix(), 
                camera.getDistorsion(), 
                rVec, tVec, 
-               false, 1000, 5, 100, cv::noArray(),
+               false, 
                CV_EPNP);
   cv::Rodrigues(rVec, rot_mat);
   pose = rot_tr_mat(rot_mat, tVec);
@@ -684,6 +638,25 @@ rot_mat_from_pose(cv::Mat pose)
   return rot_mat;
 }
 
+cv::Mat 
+pose_mat_from_tr_and_rot(cv::Mat tr_mat, cv::Mat rot_mat)
+{
+  cv::Mat camera_mat(4, 4, CV_64F);
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      camera_mat.at<double>(row, col) = rot_mat.at<double>(row, col);
+    }
+  } 
+  camera_mat.at<double>(0,3) = tr_mat.at<double>(0,0);
+  camera_mat.at<double>(1,3) = tr_mat.at<double>(1,0);
+  camera_mat.at<double>(2,3) = tr_mat.at<double>(2,0);
+  camera_mat.at<double>(3,3) = 1;
+  camera_mat.at<double>(3,0) = 0;
+  camera_mat.at<double>(3,1) = 0;
+  camera_mat.at<double>(3,2) = 0;
+  return camera_mat;
+}
+
 void 
 draw_cube_on_ref_sys(cv::Mat &image, 
                      cv::Mat camera_matrix, 
@@ -694,7 +667,7 @@ draw_cube_on_ref_sys(cv::Mat &image,
 {
   cv::Mat tr_vec, rot_vec;
   cv::Mat objectPoints (8,3,CV_32FC1);
-  cv::vector<cv::Point2f> imagePoints;
+  std::vector<cv::Point2f> imagePoints;
   float halfSize = side_lenght / 2;
   objectPoints.at<float>(0,0) = -halfSize;
   objectPoints.at<float>(0,1) = -halfSize;
@@ -793,4 +766,108 @@ _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv
   std::cout << U * W * V.t() << std::endl; // U * W.t() * V.t()
   std::cout << "TR: " << U << std::endl;*/
 
+  // Essential matrix
+  /*cv::Mat ess_mask_out;
+  cv::Mat foundamental_matrix_32;
+  cv::Mat foundamental_matrix_64 = cv::findFundamentalMat(im_points_1, im_points_2, CV_RANSAC, 3, 0.99, ess_mask_out);
+  foundamental_matrix_64.convertTo( foundamental_matrix_32, CV_32FC1 );
+  cv::Mat essential_matrix = slam_sys.camera.cameraMatrix.t() * foundamental_matrix_32 * slam_sys.camera.cameraMatrix;
+  
+  cv::SVD svd = cv::SVD(essential_matrix);
+  cv::Matx33f W(0,-1,0,1,0,0,0,0,1);
+  cv::Mat_<float> R = svd.u * cv::Mat(W) * svd.vt; //HZ 9.19
+  cv::Mat_<float> t = svd.u.col(2); //u3
 
+  if (!CheckCoherentRotation(R)) { return; };
+  
+  cv::Matx34f P(1,0,0,0, 0,1,0,0, 0,0,1,0);
+  cv::Matx34f P1(R(0,0),R(0,1),R(0,2),t(0),
+                 R(1,0),R(1,1),R(1,2),t(1),
+                 R(2,0),R(2,1),R(2,2),t(2));
+
+  cv::Mat cam_matrix;
+  cam_matrix = slam_sys.camera.cameraMatrix.inv();
+  cam_matrix.convertTo(cam_matrix,CV_32F); 
+  std::vector<cv::Point3d> point_cloud;
+  double rel_err = TriangulatePoints(ok1,
+                  ok2,
+                  cam_matrix,
+                  P,
+                  P1,
+                  point_cloud);
+  
+  std::ofstream ofs;
+  ofs.open ("test_map_tr.txt", std::ofstream::app);
+  for (auto &p : point_cloud) {
+    ofs << p.x << " " << p.y << " " << p.z << " " << 0 << " " << 255 << " " << 0 << "\n";
+  }
+  ofs.close();*/
+  /*
+   bool 
+ CheckCoherentRotation(cv::Mat_<float>& R) {
+  if(fabsf(determinant(R))-1.0 > 1e-07) {
+      std::cerr << "det(R) != +-1.0, this is not a rotation matrix" << std::endl;
+      return false;
+  }
+  return true;
+}
+
+
+cv::Mat_<float> 
+LinearLSTriangulation(cv::Point3d u,  //homogenous image point (u,v,1)
+                      cv::Matx34d P,  //camera 1 matrix
+                      cv::Point3d u1, //homogenous image point in 2nd camera
+                      cv::Matx34d P1) //camera 2 matrix
+{
+  //build A matrix
+  cv::Matx43f A(u.x*P(2,0)-P(0,0),u.x*P(2,1)-P(0,1),u.x*P(2,2)-P(0,2),
+  u.y*P(2,0)-P(1,0),u.y*P(2,1)-P(1,1),u.y*P(2,2)-P(1,2),
+  u1.x*P1(2,0)-P1(0,0), u1.x*P1(2,1)-P1(0,1),u1.x*P1(2,2)-P1(0,2),
+  u1.y*P1(2,0)-P1(1,0), u1.y*P1(2,1)-P1(1,1),u1.y*P1(2,2)-P1(1,2)
+    );
+  //build B vector
+  cv::Matx41f B(-(u.x*P(2,3)-P(0,3)),
+    -(u.y*P(2,3)-P(1,3)),
+    -(u1.x*P1(2,3)-P1(0,3)),
+    -(u1.y*P1(2,3)-P1(1,3)));
+   //solve for X
+  cv::Mat_<float> X;
+  cv::solve(A, B, X, cv::DECOMP_SVD);
+return X; 
+}
+
+double 
+TriangulatePoints(const std::vector<cv::KeyPoint> &pt_set1,
+                  const std::vector<cv::KeyPoint> &pt_set2,
+                  const cv::Mat &Kinv,
+                  const cv::Matx34f &P,
+                  const cv::Matx34f &P1,
+                  std::vector<cv::Point3d> &pointcloud)
+{
+  std::vector<double> reproj_error;
+  for (unsigned int i=0; i<pt_set1.size(); i++) {
+    //convert to normalized homogeneous coordinates
+    cv::Point2f kp = pt_set1[i].pt;
+    cv::Point3d u(kp.x,kp.y,1.0);
+    cv::Mat_<float> um = Kinv * cv::Mat_<float>(u);
+    u = um.at<cv::Point3d>(0);
+    cv::Point2f kp1 = pt_set2[i].pt;
+    cv::Point3d u1(kp1.x,kp1.y,1.0);
+    cv::Mat_<float> um1 = Kinv *cv:: Mat_<float>(u1);
+    u1 = um1.at<cv::Point3d>(0);
+    //triangulate
+    cv::Mat_<float> X = LinearLSTriangulation(u, P, u1, P1);
+    //calculate reprojection error
+    std::cout << Kinv.rows << " " << Kinv.cols << " " << cv::Mat(P1).rows << " " << cv::Mat(P1).cols << " " << X.rows << X.cols << std::endl;
+    std::cout << X << std::endl;
+    //cv::Mat_<float> xPt_img = Kinv * cv::Mat(P1) * X; //K * cv::Mat(P1) * X;
+    //cv::Point2f xPt_img_(xPt_img(0) / xPt_img(2), xPt_img(1) / xPt_img(2));
+    //reproj_error.push_back(cv::norm(xPt_img_-kp1));
+    //store 3D point
+    pointcloud.push_back(cv::Point3d(X(0),X(1),X(2)));
+  }
+  //return mean reprojection error
+  cv::Scalar me = cv::mean(reproj_error);
+  return me[0];
+}
+*/

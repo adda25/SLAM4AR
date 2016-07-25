@@ -3,7 +3,7 @@
 //  Eyes
 //
 //  Created by Amedeo Setti on 20/06/16.
-//  Copyright (c) 2015 Amedeo Setti. All rights reserved.
+//  Copyright (c) 2016 Amedeo Setti. All rights reserved.
 //
 
 #ifndef __SLAM_HPP__
@@ -11,7 +11,6 @@
 #include <iostream>
 #include <vector>
 #include <opencv2/opencv.hpp>
-//#include <opencv2/nonfree/features2d.hpp>
 #include "opencv2/core/version.hpp"
 #include <chrono>
 #include <string>
@@ -24,15 +23,24 @@
 
 typedef struct 
 {
+  #if CV_MAJOR_VERSION == 2
   cv::FeatureDetector *features_detector;
   cv::DescriptorExtractor *descriptions_extractor;
+  #elif CV_MAJOR_VERSION == 3
+  cv::Ptr<cv::ORB> features_detector;
+  cv::Ptr<cv::ORB> descriptions_extractor;
+  #endif
   MyCamereParamReader camera;  
 } SlamSystem;
 
 
 void slam__init(SlamSystem &slam_sys, const std::string camera_path);
 
-void slam__map(const SlamSystem &slam_sys, cv::Mat image_1, cv::Mat image_2);
+#if CV_MAJOR_VERSION == 3
+std::vector<MapPoint> slam__map(const SlamSystem &slam_sys, 
+                                cv::Mat image_1, 
+                                cv::Mat image_2);
+#endif
 
 std::vector<MapPoint> slam__map(const SlamSystem &slam_sys, 
                                 cv::Mat &image_1, 
@@ -47,10 +55,6 @@ cv::Mat slam__localize(const SlamSystem &slam_sys,
 std::vector<cv::Rect> slam__find_objects(const SlamSystem &slam_sys, 
                                          std::vector<Map> objects_maps, 
                                          cv::Mat &image);
-
-// TODO
-cv::Mat slam_localize_and_update(const SlamSystem &slam_sys, Map &map, cv::Mat &image);
-//
 
 cv::Mat slam__estimated_pose(std::vector<MapPoint> matches, MyCamereParamReader camera); 
 cv::Mat slam__estimated_pose(std::vector<cv::Point2f> img_points_vector, 

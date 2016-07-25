@@ -5,24 +5,31 @@
 void (*test_ptr)(std::vector<int>);
 void map(cv::Mat frame);
 void test_map_system(std::vector<int> params);
+void test_map_localize_update(std::vector<int> params);
 void test_map_system_5_point(std::vector<int> params);
 void test_map_and_pose_system(std::vector<int> params);
 void test_write_and_load_map(std::vector<int> params);
 void test_find_object(std::vector<int> params);
 void video_iterator(void (*test_ptr)(cv::VideoCapture capture, int count));
 
-
+// sudo cp /usr/local/Cellar/opencv3/3.1.0_3/lib/pkgconfig/opencv.pc /usr/local/lib/pkgconfig/
 std::string camera_path = "/Users/adda/Work/TDOR2/out_camera_data_iOS_720_3.yml";
 
 int 
 main(int argc, char** argv) 
 {
-  using namespace std;
-  cout << "###  Test Slam  ###" << endl;
-  vector<int> params;
+  std::cout << "###  Test Slam  ###" << std::endl;
+  #if CV_MAJOR_VERSION == 2
+  std::cout << "Opencv 2" << std::endl;
+  #elif CV_MAJOR_VERSION == 3
+  std::cout << "Opencv 3" << std::endl;
+  #endif
+
+  std::vector<int> params;
   for (int i = 0; i < argc; ++i) { params.push_back(atoi(argv[i])); }
   //test_map_system(params);
-  test_map_system_5_point(params);
+  //test_map_system_5_point(params);
+  test_map_localize_update(params);
   //test_map_and_pose_system(params);
   //test_write_and_load_map(params);
   //test_find_object(params);
@@ -49,6 +56,44 @@ test_map_system(std::vector<int> params)
   slam.map_write_point_cloud("map.txt", true);
 }
 
+/* Test map init and localization
+   with map update. 
+   -> params[1] = init map lenght
+   -> params[2] = update map lenght
+   -> params[3] = distance between camera frames */
+void 
+test_map_localize_update(std::vector<int> params)
+{
+  std::string video_path = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v";
+  MyMarkerDetector marker_detector = MyMarkerDetector(120.0, camera_path);
+  cv::Mat frame;
+  cv::Mat estimated_pose;
+  SlamAPI slam = SlamAPI(camera_path);
+  cv::VideoCapture capture(video_path);
+
+  slam.map_init();
+  slam.min_dist = (double)params[3];
+
+  // Initialize the map with the marker
+  for (int i = 0; i < params[1]; i++) {
+    capture >> frame;
+    if (frame.cols == 0) { break; }
+    Marker m1 = marker_detector.detectMarker(frame);
+    if (m1.marker.size() == 0) { continue; } 
+    slam.map_update(frame, m1.marker[0].pose());
+  }
+  slam.map_write_point_cloud("initial_map.txt", true);
+  
+  // Localize and update the map
+  for (int i = params[1]; i < params[2]; i++) {
+    capture >> frame;
+    if (frame.cols == 0) { break; }
+    slam.localize_and_update(frame, estimated_pose);
+    slam.visualize(frame, estimated_pose, true, false);
+  }
+  slam.map_write_point_cloud("final_map.txt", true);
+}
+/*
 void 
 test_map_system_5_point(std::vector<int> params)
 {
@@ -66,7 +111,8 @@ test_map_system_5_point(std::vector<int> params)
     if (m1.marker.size() == 0) { continue; }
     slam.map_update(frame, m1.marker[0].pose(), 0);
   }
-}
+  slam.map_write_point_cloud("map.txt", true);
+}*/
 
 void 
 test_map_and_pose_system(std::vector<int> params) 
@@ -90,9 +136,7 @@ test_map_and_pose_system(std::vector<int> params)
     //cv::resize(frame, nf,s);
     Marker m1 = marker_detector.detectMarker(frame);
     if (m1.marker.size() == 0) { continue; } 
-    //std::cout << "ENTER BIG\n";
     slam.map_update(frame, m1.marker[0].pose());
-    //std::cout << "EXIT BIG\n";
   }
   //slam.map_write_point_cloud("map.txt", true);
   for (int i = 0; i < params[2]; i++) {

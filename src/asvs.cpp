@@ -23,9 +23,9 @@ SlamAPI::map_init()
   map = map__create(a, b);
   map_point_size = 0;
 }
-
+/*
 void 
-SlamAPI::map_update(cv::Mat &frame, cv::Mat pose, int kk = 0)
+SlamAPI::map_update(cv::Mat &frame, cv::Mat pose, int kk)
 {
   static int state = 0;
   static uint frame_counter = 0;  
@@ -37,12 +37,13 @@ SlamAPI::map_update(cv::Mat &frame, cv::Mat pose, int kk = 0)
     return;
   } else if (frame_counter == 100) {
     frame_counter = 0;
-    slam__map(slam_sys, image_1, frame);
-    std::cout << "Real diff: " << pose_1 * pose.inv() << std::endl;
+    std::vector<MapPoint> kf_map = slam__map(slam_sys, image_1, frame);
+    map__update(map, kf_map, pose, frame);
+    //std::cout << "Real diff: " << pose_1 * pose.inv() << std::endl;
     state = 0;
   }
   frame_counter++;
-}
+}*/
 
 void 
 SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
@@ -115,6 +116,32 @@ void
 SlamAPI::localize(cv::Mat &frame, cv::Mat &estimated_pose)
 {
   estimated_pose = slam__localize(slam_sys, map, frame);
+}
+
+void 
+SlamAPI::localize_and_update(cv::Mat &frame, cv::Mat &estimated_pose)
+{
+  static cv::Mat last_pose;
+  static cv::Mat last_frame;
+  static int counter = 0;
+  localize(frame, estimated_pose);
+  //estimated_pose = slam__localize(slam_sys, map, frame); 
+  if (counter == 0) {
+    frame.copyTo(last_frame);
+    estimated_pose.copyTo(last_pose);
+  } 
+  if (counter == 30) {
+    std::vector<MapPoint> kf_map = slam__map(slam_sys, 
+                                             last_frame, 
+                                             frame, 
+                                             last_pose, 
+                                             estimated_pose);
+    map_point_size += kf_map.size();
+    map__update(map, kf_map, estimated_pose, frame);
+    counter = 0;
+    return;
+  }
+  counter++;
 }
 
 void 
@@ -303,7 +330,8 @@ SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
   future_thread = std::async(std::launch::async, slam_map_update_w_thread, slam_sys, image_1, frame, pose_1, pose, std::ref(map), std::ref(map_point_size));
   future_launched = true;
   //std::cout << "AFTER THREAD\n";
-  /*std::vector<MapPoint> kf_map = slam__map(slam_sys, 
+  
+  std::vector<MapPoint> kf_map = slam__map(slam_sys, 
                                            image_1, 
                                            frame, 
                                            pose_1, 

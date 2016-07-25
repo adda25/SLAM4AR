@@ -9,7 +9,7 @@ OBJ=main.o slam.o asvs.o  marker.o camera_param_reader.o map.o
 	$(CC) $(OPT)  -c -o $@ $< $(CFLAGS) `pkg-config --cflags opencv`
 
 eyes: $(OBJ)
-	$(CC) $(OPT)  -o $@ $^ $(CFLAGS) $(OPENCV)
+	$(CC) $(OPT)  -o $@ $^ $(CFLAGS) $(OPENCV) -L/usr/local/lib/
 
 .PHONY: clean
 
