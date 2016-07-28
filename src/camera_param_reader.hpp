@@ -11,6 +11,27 @@
 #include <iostream>
 #include <stdlib.h>
 
+class CameraSystem
+{
+public:
+    CameraSystem() {};
+    ~CameraSystem() {};
+
+    void set_from_yaml(std::string filePath);
+
+    cv::Mat cam_point_from_pixel(cv::Point pixel_xy, double z);
+
+    cv::Mat  camera_matrix;
+    cv::Mat  distorsion;
+    cv::Size cam_size;
+    int x_center = 0;
+    int y_center = 0;
+    int xy_focal = 0;
+private:
+    
+};
+
+
 class MyCamereParamReader
 {
 public:
@@ -33,8 +54,9 @@ public:
     
     cv::Mat  cameraMatrix;
     cv::Mat  distorsion;
-private:
     cv::Size camSize;
+private:
+    
 };
 
 

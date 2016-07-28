@@ -1,3 +1,13 @@
+/*
+ ____  _                    _    ____ ___ 
+/ ___|| | __ _ _ __ ___    / \  |  _ \_ _|
+\___ \| |/ _` | '_ ` _ \  / _ \ | |_) | | 
+ ___) | | (_| | | | | | |/ ___ \|  __/| | 
+|____/|_|\__,_|_| |_| |_/_/   \_\_|  |___|
+
+Developed by Amedeo Setti                 
+*/
+
 #ifndef __ASVS_HPP__
 #define __ASVS_HPP__
 
@@ -7,14 +17,19 @@
 #include <fstream>
 #include <thread>
 #include <future>
+#include <cassert>
 #include "slam.hpp"
 #include "marker.hpp"
 
 class SlamAPI
 {
 public:
+  SlamAPI() {
+    map_init();
+  }
   SlamAPI(std::string camera_path) 
   {
+    map_init();
     slam_sys_init(camera_path);
   }
 
@@ -55,21 +70,4 @@ private:
   
 
 };
-
-/*
-class SlamAPI
-{
-public:
-  SlamAPI(std::string cam_path) {
-    camera_path = cam_path;
-  }
-  
-  std::string camera_path;
-
-  Map  slam_map(cv::VideoCapture capture, int count, float min_dist);
-  void slam_localize(cv::VideoCapture capture_test, int count_test, Map map);  
-  void slam_find_objects(cv::VideoCapture capture, int count_test, std::vector<Map> objects_maps);
-};
-*/
-
 #endif // End __ASVS_HPP__

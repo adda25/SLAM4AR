@@ -1,3 +1,11 @@
+/*
+ ____  _                 
+/ ___|| | __ _ _ __ ___  
+\___ \| |/ _` | '_ ` _ \ 
+ ___) | | (_| | | | | | |
+|____/|_|\__,_|_| |_| |_|
+                         
+*/
 //
 //  slam.hpp
 //  Eyes
@@ -11,28 +19,13 @@
 #include <iostream>
 #include <vector>
 #include <opencv2/opencv.hpp>
-#include "opencv2/core/version.hpp"
 #include <chrono>
 #include <string>
 #include <cstdint>
 #include <fstream>
 #include <future>
 #include <thread>
-#include "camera_param_reader.hpp"
 #include "map.hpp"
-
-typedef struct 
-{
-  #if CV_MAJOR_VERSION == 2
-  cv::FeatureDetector *features_detector;
-  cv::DescriptorExtractor *descriptions_extractor;
-  #elif CV_MAJOR_VERSION == 3
-  cv::Ptr<cv::ORB> features_detector;
-  cv::Ptr<cv::ORB> descriptions_extractor;
-  #endif
-  MyCamereParamReader camera;  
-} SlamSystem;
-
 
 void slam__init(SlamSystem &slam_sys, const std::string camera_path);
 
@@ -48,6 +41,10 @@ std::vector<MapPoint> slam__map(const SlamSystem &slam_sys,
                                 const cv::Mat &pose_1, 
                                 const cv::Mat &pose_2);
 
+std::vector<MapPoint> slam__map(const SlamSystem &slam_sys,
+                                const ImageForMapping &im_data_1,
+                                const ImageForMapping &im_data_2);
+
 cv::Mat slam__localize(const SlamSystem &slam_sys, 
                        const Map &map, 
                        cv::Mat &image);
@@ -56,10 +53,10 @@ std::vector<cv::Rect> slam__find_objects(const SlamSystem &slam_sys,
                                          std::vector<Map> objects_maps, 
                                          cv::Mat &image);
 
-cv::Mat slam__estimated_pose(std::vector<MapPoint> matches, MyCamereParamReader camera); 
+cv::Mat slam__estimated_pose(std::vector<MapPoint> matches, CameraSystem camera); 
 cv::Mat slam__estimated_pose(std::vector<cv::Point2f> img_points_vector, 
                              std::vector<cv::Point3f> obj_points_vector, 
-                             MyCamereParamReader camera); 
+                             CameraSystem camera); 
 
 void draw_cube_on_ref_sys(cv::Mat &image, 
                           cv::Mat camera_matrix, 
@@ -67,6 +64,10 @@ void draw_cube_on_ref_sys(cv::Mat &image,
                           cv::Mat pose, 
                           uint side_lenght, 
                           cv::Scalar color); 
+
+// AUX FOR EXTERNAL
+void compute_params_for_image(const SlamSystem &slam_sys, ImageForMapping &ifm);
+
 
 // AUX
 cv::Mat tr_vec_from_pose(cv::Mat pose);

@@ -1,7 +1,17 @@
+/*
+ ____  _                    _    ____ ___ 
+/ ___|| | __ _ _ __ ___    / \  |  _ \_ _|
+\___ \| |/ _` | '_ ` _ \  / _ \ | |_) | | 
+ ___) | | (_| | | | | | |/ ___ \|  __/| | 
+|____/|_|\__,_|_| |_| |_/_/   \_\_|  |___|
+                                          
+*/
+
 #include "asvs.hpp"
 
 template <typename T> 
-void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& distance) {
+void calc_distance(cv::Mat trvec1, cv::Mat trvec2, T& distance) 
+{
     T x = trvec2.at<T>(0,0) - trvec1.at<T>(0,0);
     T y = trvec2.at<T>(1,0) - trvec1.at<T>(1,0);
     T z = trvec2.at<T>(2,0) - trvec1.at<T>(2,0);
@@ -23,28 +33,33 @@ SlamAPI::map_init()
   map = map__create(a, b);
   map_point_size = 0;
 }
+
 /*
 void 
-SlamAPI::map_update(cv::Mat &frame, cv::Mat pose, int kk)
+SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
 {
-  static int state = 0;
-  static uint frame_counter = 0;  
-  static cv::Mat image_1, pose_1;
-  if (state == 0) {
-    pose.copyTo(pose_1);
-    frame.copyTo(image_1);
-    state = 1;
+  static std::vector<ImageForMapping> image_pairs;
+  if (image_pairs.size() == 0) {
+    ImageForMapping ifm;
+    frame.copyTo(ifm.frame);
+    pose.copyTo(ifm.pose);
+    compute_params_for_image(slam_sys, ifm);
+    image_pairs.push_back(ifm);
     return;
-  } else if (frame_counter == 100) {
-    frame_counter = 0;
-    std::vector<MapPoint> kf_map = slam__map(slam_sys, image_1, frame);
-    map__update(map, kf_map, pose, frame);
-    //std::cout << "Real diff: " << pose_1 * pose.inv() << std::endl;
-    state = 0;
   }
-  frame_counter++;
-}*/
-
+  double distance = 0.0;
+  calc_distance(tr_vec_from_pose(image_pairs[0].pose), tr_vec_from_pose(pose), distance);
+  if (distance < min_dist) { return; }
+  ImageForMapping ifm;
+  frame.copyTo(ifm.frame);
+  pose.copyTo(ifm.pose);
+  compute_params_for_image(slam_sys, ifm);
+  std::vector<MapPoint> kf_map = slam__map(slam_sys, image_pairs[0], ifm);
+  map_point_size += kf_map.size();
+  map__update(map, kf_map, pose, frame);
+  image_pairs[0] = ifm;
+}
+*/
 void 
 SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
 {
@@ -73,13 +88,17 @@ SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
 void 
 SlamAPI::map_update_stereo(cv::Mat &frame_1, cv::Mat &frame_2)
 {
-// TODO
+  // TODO
+  assert(0);
+  std::cout << "Function at " << __LINE__ << " is not implemented yet." <<std::endl;
 }
 
 void 
 SlamAPI::map_remove_old_sectors()
 {
-// TODO
+  // TODO
+  assert(0);
+  std::cout << "Function at " << __LINE__ << " is not implemented yet." <<std::endl;
 }
 
 void 
@@ -125,12 +144,13 @@ SlamAPI::localize_and_update(cv::Mat &frame, cv::Mat &estimated_pose)
   static cv::Mat last_frame;
   static int counter = 0;
   localize(frame, estimated_pose);
-  //estimated_pose = slam__localize(slam_sys, map, frame); 
   if (counter == 0) {
     frame.copyTo(last_frame);
     estimated_pose.copyTo(last_pose);
   } 
-  if (counter == 30) {
+  double distance = 0.0;
+  calc_distance(tr_vec_from_pose(last_pose), tr_vec_from_pose(estimated_pose), distance);
+  if (distance > min_dist) {
     std::vector<MapPoint> kf_map = slam__map(slam_sys, 
                                              last_frame, 
                                              frame, 
@@ -167,12 +187,12 @@ void
 SlamAPI::visualize(cv::Mat &frame, cv::Mat &pose, bool draw_map, bool draw_sr)
 {
   if (draw_map) {
-    map__draw(frame, map, tr_vec_from_pose(pose), rot_mat_from_pose(pose), slam_sys.camera.cameraMatrix, slam_sys.camera.distorsion);
+    map__draw(frame, map, tr_vec_from_pose(pose), rot_mat_from_pose(pose), slam_sys.camera.camera_matrix, slam_sys.camera.distorsion);
   }
   if (draw_sr) {
-    //draw_cube_on_ref_sys(frame, slam_sys.camera.getCameraMatrix(), slam_sys.camera.getDistorsion(), estimated_camera_pose, 120, cv::Scalar(255, 0, 0, 255));    
+    draw_cube_on_ref_sys(frame, slam_sys.camera.camera_matrix, slam_sys.camera.distorsion, pose, 120, cv::Scalar(255, 0, 0, 255));    
   }
-  cv::imshow("n", frame);
+  cv::imshow("Visualize", frame);
   cv::waitKey(5);
 }
 
@@ -342,6 +362,28 @@ SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
   state = 0;
 }
 */
+
+/*
+void 
+SlamAPI::map_update(cv::Mat &frame, cv::Mat pose, int kk)
+{
+  static int state = 0;
+  static uint frame_counter = 0;  
+  static cv::Mat image_1, pose_1;
+  if (state == 0) {
+    pose.copyTo(pose_1);
+    frame.copyTo(image_1);
+    state = 1;
+    return;
+  } else if (frame_counter == 100) {
+    frame_counter = 0;
+    std::vector<MapPoint> kf_map = slam__map(slam_sys, image_1, frame);
+    map__update(map, kf_map, pose, frame);
+    //std::cout << "Real diff: " << pose_1 * pose.inv() << std::endl;
+    state = 0;
+  }
+  frame_counter++;
+}*/
 
 
 

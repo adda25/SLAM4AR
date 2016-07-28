@@ -1,3 +1,12 @@
+/*
+ __  __             
+|  \/  | __ _ _ __  
+| |\/| |/ _` | '_ \ 
+| |  | | (_| | |_) |
+|_|  |_|\__,_| .__/ 
+             |_|    
+*/
+
 #ifndef __MAP_HPP__
 #define __MAP_HPP__
 #include <vector>
@@ -5,17 +14,39 @@
 #include <fstream>
 #include <stdint.h>
 #include <opencv2/opencv.hpp>
-#include "sys_conf.hpp"
+#include "camera_param_reader.hpp"
+
+typedef struct
+{
+  cv::Mat frame;
+  std::vector<cv::KeyPoint> keypoint;
+  cv::Mat descriptor;
+  cv::Mat pose;
+} ImageForMapping;
+
+typedef struct 
+{
+  #if CV_MAJOR_VERSION == 2
+  cv::FeatureDetector *features_detector;
+  cv::DescriptorExtractor *descriptions_extractor;
+  #elif CV_MAJOR_VERSION == 3
+  cv::Ptr<cv::ORB> features_detector;
+  cv::Ptr<cv::ORB> descriptions_extractor;
+  #endif
+  cv::BFMatcher matcher;
+  CameraSystem camera;  
+} SlamSystem;
 
 typedef struct 
 {
   cv::Point3f coords_3D;
   cv::Point3f coords_3D_camera_sys;
   cv::KeyPoint keypoint;
-  cv::Mat descriptor  = cv::Mat(1, 32, CV_8U);   
+  cv::Mat descriptor = cv::Mat(1, 128, CV_8U);   //// TODO CHANGE 32
   uint hits = 0;
   cv::Point2f point_pixel_pos;
-  cv::Point3f pixel_colors;
+  cv::Vec3b pixel_colors;
+  cv::Mat pose;
 } MapPoint;
 
 typedef struct 
@@ -36,13 +67,19 @@ Map  map__create(uint sectors[3], uint sector_size[3]);
 
 void map__update(Map &map, std::vector<MapPoint> points, const cv::Mat pose, const cv::Mat &frame);
 
+void 
+map__only_enlarge(Map &map, 
+            std::vector<MapPoint> points, 
+            const cv::Mat pose, 
+            const cv::Mat &frame);
+
 void map__remove_empty_sectors(Map &map, uint min_size = 0);
 
 int  map__sector_for_coords(Map &map, cv::Point3f coords_3D);
 
 /* Returns the partial map that the
 camera is viewing */
-Map  map__sectors_in_view(const Map &map, cv::Mat camera_pose);
+Map  map__sectors_in_view(CameraSystem &camera, const Map &map, cv::Mat camera_pose);
 
 void map__draw(cv::Mat &frame_to_draw, 
                const Map &map_to_draw, 

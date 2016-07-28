@@ -1,3 +1,12 @@
+/*
+ __  __             
+|  \/  | __ _ _ __  
+| |\/| |/ _` | '_ \ 
+| |  | | (_| | |_) |
+|_|  |_|\__,_| .__/ 
+             |_|    
+*/
+
 #include "map.hpp"
 
 // "Private routines"
@@ -17,7 +26,7 @@ bool _point_inside_pyramid(cv::Point3f py_center,
                            cv::Point3f point_to_check);
 cv::Mat _vector_from_2_points(cv::Point3f p1, cv::Point3f p2);
 
-// Aux
+
 std::vector<std::string> split(std::string data, std::string token);
 
 int  
@@ -98,6 +107,7 @@ map__update(Map &map,
             const cv::Mat &frame) 
 {
   for (auto &p : points) {
+    if (p.coords_3D.x != p.coords_3D.x) { continue; }
     // Get right sector
     int sector_index = map__sector_for_coords(map, p.coords_3D);
     if (sector_index == -1) {
@@ -123,7 +133,7 @@ _map__match_features(cv::Mat descriptors_1, cv::Mat descriptors_2)
   std::vector<std::vector<cv::DMatch>> matches;
   std::vector<cv::DMatch> tot_matches;
   size_t t_size = 0;
-  cv::BFMatcher matcher = cv::BFMatcher(cv::NORM_HAMMING2, true);
+  cv::BFMatcher matcher = cv::BFMatcher(cv::NORM_HAMMING, true);
   matcher.knnMatch(descriptors_1, descriptors_2, matches, 1);
   for (auto &m : matches) { t_size += m.size(); }
   tot_matches.reserve(t_size);
@@ -136,7 +146,7 @@ _map__similar_point_in_sector(MapPoint point, MapSector &sector)
 {
   for (auto &p : sector.sector_points) {
     std::vector<cv::DMatch>  dm = _map__match_features(point.descriptor, p.descriptor);
-    if (dm[0].distance < 3) {
+    if (dm[0].distance < 0.1) {
         std::cout << "--> Refining " << p.coords_3D << " " << point.coords_3D << std::endl;
         p.coords_3D.x = (p.coords_3D.x + point.coords_3D.x) * 0.5;
         p.coords_3D.x = (p.coords_3D.y + point.coords_3D.y) * 0.5;
@@ -172,7 +182,9 @@ map__sector_for_coords(Map &map, cv::Point3f coords_3D)
 /* Returns the partial map in the
 camera frustum */
 Map 
-map__sectors_in_view(const Map &map, cv::Mat camera_pose) 
+map__sectors_in_view(CameraSystem &camera, 
+                     const Map &map, 
+                     cv::Mat camera_pose) 
 {
   cv::Mat estimated_camera_pose;
   camera_pose.copyTo(estimated_camera_pose);
@@ -183,23 +195,23 @@ map__sectors_in_view(const Map &map, cv::Mat camera_pose)
   cv::Point3f box_center;
 
   // Get camera center
-  cv::Mat cam_c = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(640, 360, 0));
+  cv::Mat cam_c = estimated_camera_pose * camera.cam_point_from_pixel(cv::Point(camera.x_center, camera.y_center), 0);
   cam_center = cv::Point3f(cam_c.at<double>(0, 0), cam_c.at<double>(1, 0), cam_c.at<double>(2, 0));
 
   // Up-Left
-  cv::Mat u_l_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(0, 0, 1000));
+  cv::Mat u_l_pt = estimated_camera_pose * camera.cam_point_from_pixel(cv::Point(0, 0), 0);
   up_left_pt = cv::Point3f(u_l_pt.at<double>(0, 0), u_l_pt.at<double>(1, 0), u_l_pt.at<double>(2, 0));
 
   // Up-Right
-  cv::Mat u_r_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(1280, 0, 1000));
+  cv::Mat u_r_pt = estimated_camera_pose * camera.cam_point_from_pixel(cv::Point(camera.cam_size.width, 0), 1000);
   up_right_pt = cv::Point3f(u_r_pt.at<double>(0, 0), u_r_pt.at<double>(1, 0), u_r_pt.at<double>(2, 0));
 
   // Down-Right
-  cv::Mat d_r_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(1280, 720, 1000));
+  cv::Mat d_r_pt = estimated_camera_pose * camera.cam_point_from_pixel(cv::Point(camera.cam_size.width, camera.cam_size.height), 1000);
   down_right_pt = cv::Point3f(d_r_pt.at<double>(0, 0), d_r_pt.at<double>(1, 0), d_r_pt.at<double>(2, 0));
 
   // Down-Left
-  cv::Mat d_l_pt = estimated_camera_pose * _cam_point_from_pixel(cv::Point3f(0, 720, 1000));
+  cv::Mat d_l_pt = estimated_camera_pose * camera.cam_point_from_pixel(cv::Point(0, camera.cam_size.height), 1000);
   down_left_pt = cv::Point3f(d_l_pt.at<double>(0, 0), d_l_pt.at<double>(1, 0), d_l_pt.at<double>(2, 0));
 
   //std::cout << up_left_pt << " " << up_right_pt << " " << down_right_pt << " " << down_left_pt << std::endl;
@@ -257,7 +269,8 @@ map__write(std::string filename, const Map &map_to_write, bool write_grid)
   }
   for (auto &s : map_to_write) {
     for (auto &p : s.sector_points) {
-        ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << 0 << " " << 255 << " " << 0 << "\n";
+      //std::cout << (int)p.pixel_colors.val[0] << std::endl;
+        ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << (int)p.pixel_colors.val[0] << " " << (int)p.pixel_colors.val[1] << " " << (int)p.pixel_colors.val[2] << "\n";
     }
   }
   ofs.close();
