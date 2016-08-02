@@ -9,20 +9,24 @@
 
 #include "slam.hpp"
 
+KeyframesMap keyframes_map;
+
 struct SlamSystemPerformanceParams
 {
-  int    accuracy_index               = 20;
-  double triangulation_relative_error = 0.002;
-  int    orb_n_of_features_to_search  = 1000;
+  int    accuracy_index               = 50;
+  double triangulation_relative_error = 0.02;
+  int    orb_n_of_features_to_search  = 8000;
   float  orb_scale_factor             = 1.02f;
   int    orb_n_pyramid                = 32;                                             
   int    orb_brief_patch_size         = 128;
-  int    bfm_norm                     = cv::NORM_HAMMING;
+  int    bfm_norm                     = cv::NORM_HAMMING2;
 } slam_sys_pfr_pr;
 
 typedef std::chrono::high_resolution_clock::time_point mtime;
+
 mtime
 get_chrono() { return std::chrono::high_resolution_clock::now(); }
+
 void 
 measure_chrono(mtime start_time, 
                std::string mex) 
@@ -63,7 +67,8 @@ _slam__triangulate(CameraSystem camera,
                    std::vector<MapPoint> matched_points1, 
                    cv::Mat pose1, 
                    std::vector<MapPoint> matched_points2, 
-                   cv::Mat pose2);
+                   cv::Mat pose2,
+                   cv::Mat image_2);
 
 cv::Mat_<double>
 _slam__linear_triangulation(cv::Point3d u,
@@ -77,6 +82,12 @@ _slam__triangulate(CameraSystem camera,
                    std::vector<MapPoint> matched_points1, 
                    std::vector<MapPoint> matched_points2, 
                    cv::Mat from1to2);
+
+cv::Mat_<double>  
+_slam__linear_triangulation_iterative(cv::Point3d u,
+                                      cv::Mat P,
+                                      cv::Point3d u1,
+                                      cv::Mat P1);
 
 std::vector<double> 
 _slam__solve_linear_system(cv::Point3f p11, cv::Point3f p12, cv::Point3f p21, cv::Point3f p22); 
@@ -198,36 +209,34 @@ slam__map(const SlamSystem &slam_sys,
   std::future<cv::Mat> df2 = std::async(std::launch::async, _slam__extract_descriptors, slam_sys, image_2, keypoints2);
   cv::Mat descriptors1 = df1.get();
   cv::Mat descriptors2 = df2.get();
-  std::vector<cv::DMatch> matches = _slam__match_features(slam_sys, descriptors1, descriptors2); // cv::NORM_HAMMING
+  std::vector<cv::DMatch> matches = _slam__match_features(slam_sys, descriptors1, descriptors2); 
   _slam__split_matches(matches, keypoints1, descriptors1, keypoints2, descriptors2, matched_points1, matched_points2, true);
   //_slam__correct_matches(matched_points1, matched_points2);
   //debug_pair(image_1, image_2, matched_points1, matched_points2);
-  std::vector<MapPoint> total_matches = _slam__triangulate(slam_sys.camera, image_1, matched_points1, pose_1, matched_points2, pose_2);  
-  //std::cout << total_matches.size() << std::endl;
+  std::vector<MapPoint> total_matches = _slam__triangulate(slam_sys.camera, image_1, matched_points1, pose_1, matched_points2, pose_2, image_2);
+  
+  ////////////////////////////////////////////
+  ////////////////////////////////////////////
+  Keyframe kf = Keyframe(pose_2, image_2, slam_sys_pfr_pr.orb_brief_patch_size);
+  for (auto &mp : total_matches) {
+    kf.keypoints.push_back(mp.keypoint);
+    kf.coords_3D.push_back(mp.coords_3D);
+    kf.descriptors.push_back(mp.descriptor);
+  }
+  keyframes_map << kf;
+  //if (keyframes_map.keyframes.size() > 2) {
+  //  keyframes_map.adjust(slam_sys.camera.camera_matrix);
+  //}
+  ////////////////////////////////////////////
+  ////////////////////////////////////////////
+
   return total_matches;
 }
 
-std::vector<MapPoint> 
-slam__map(const SlamSystem &slam_sys,
-          const ImageForMapping &im_data_1,
-          const ImageForMapping &im_data_2)
+void 
+slam__adjust_map(const SlamSystem &slam_sys)
 {
-  std::vector<MapPoint> matched_points1;
-  std::vector<MapPoint> matched_points2;
-  std::vector<cv::DMatch> matches = _slam__match_features(slam_sys,
-                                                          im_data_1.descriptor, 
-                                                          im_data_2.descriptor);
-  _slam__split_matches(matches, im_data_1.keypoint, im_data_1.descriptor, 
-                                im_data_2.keypoint, im_data_2.descriptor, 
-                                matched_points1,    matched_points2, 
-                                true);
-  std::vector<MapPoint> total_matches = _slam__triangulate(slam_sys.camera,
-                                                           im_data_1.frame, 
-                                                           matched_points1, 
-                                                           im_data_1.pose, 
-                                                           matched_points2, 
-                                                           im_data_2.pose);  
-  return total_matches;
+  keyframes_map.adjust(slam_sys.camera.camera_matrix);
 }
 
 cv::Mat 
@@ -246,14 +255,17 @@ slam__localize(const SlamSystem &slam_sys, const Map &map, cv::Mat &image)
   std::vector<MapMatchFt_C> mapMatchFt;
   keypoints = _slam__search_features(slam_sys, image);
   descriptors = _slam__extract_descriptors(slam_sys, image, keypoints);
+  //Keyframe kf = keyframes_map.end();
+  //old_descriptors = kf.descriptors;
+  //old_keypoints = kf.keypoints;
   map__merge_keypoints_and_descriptors(map, old_keypoints, old_descriptors);
-  new_matches = _slam__match_features(slam_sys, old_descriptors, descriptors); // cv::NORM_HAMMING
+  new_matches = _slam__match_features(slam_sys, old_descriptors, descriptors); 
   _slam__split_matches(new_matches, old_keypoints, old_descriptors, keypoints, descriptors, matched_points1, matched_points2);
   mapMatchFt = _slam__find_p2p_correspondence(slam_sys, map, matched_points1, matched_points2);
   _slam__good_data_for_solvePnp(mapMatchFt, img_points_vector, obj_points_vector);
   if (img_points_vector.size() < 7) { return cv::Mat(4, 4, CV_64F, double(0)); }
+  std::cout << "---> old:  " << old_keypoints.size() << " new: " << new_matches.size() << " afterp2p: " << mapMatchFt.size() << " afterGoodPnp: "<< img_points_vector.size() << std::endl; 
   pose = slam__estimated_pose(img_points_vector, obj_points_vector, slam_sys.camera);
-  std::cout << pose << std::endl;
   //debug_loc(image, map, img_points_vector);
   //map__draw(image, map, tr_vec_from_pose(pose), rot_mat_from_pose(pose), slam_sys.camera.cameraMatrix, slam_sys.camera.distorsion);
   return pose;
@@ -358,18 +370,6 @@ _slam__split_matches(std::vector<cv::DMatch> matches,
   }
 }
 
-cv::Mat 
-_camera_matrix43(const cv::Mat camera_matrix)
-{
-  cv::Mat camera_matrix_e = cv::Mat::zeros(3,4,CV_32FC1);
-  for (int i = 0; i < 3; i++) {
-    for (int k = 0; k < 3; k++) {
-      camera_matrix_e.at<float>(i,k) = camera_matrix.at<float>(i,k);
-    }
-  }
-  return camera_matrix_e;
-}
-
 cv::Point3d 
 _normalized_point(const cv::Mat camera_matrix_e, cv::Point2f point)
 {
@@ -377,9 +377,7 @@ _normalized_point(const cv::Mat camera_matrix_e, cv::Point2f point)
   p.at<float>(0,0) = point.x;
   p.at<float>(1,0) = point.y;
   p.at<float>(2,0) = 1;
-  //std::cout << p << " " << camera_matrix_e << "  " << camera_matrix_e.inv() << std::endl;
   cv::Mat r = camera_matrix_e.inv() * p;
-  //std::cout << "R: " << r << std::endl;
   return cv::Point3d(r.at<float>(0,0), r.at<float>(1,0), r.at<float>(2,0));
 }
 
@@ -389,47 +387,35 @@ _slam__triangulate(CameraSystem camera,
                    std::vector<MapPoint> matched_points1, 
                    cv::Mat pose1, 
                    std::vector<MapPoint> matched_points2, 
-                   cv::Mat pose2)
+                   cv::Mat pose2,
+                   cv::Mat image_2)
 {
   std::vector<MapPoint> total_matches;
-  cv::Mat from1to2 = pose1 * pose2.inv();
+  cv::Mat gray_1;
+  cv::cvtColor(image_1, gray_1, CV_BGRA2GRAY);
+  cv::Mat gray_2;
+  cv::cvtColor(image_2, gray_2, CV_BGRA2GRAY);
   for (int gm = 0; gm < matched_points1.size(); gm++) {
-    cv::Mat cam_points_11 = camera.cam_point_from_pixel(matched_points1[gm].keypoint.pt, 100);
-    cv::Mat cam_points_12 = camera.cam_point_from_pixel(matched_points1[gm].keypoint.pt, 20000);
-    cv::Mat cam_points_21 = camera.cam_point_from_pixel(matched_points2[gm].keypoint.pt, 100);
-    cv::Mat cam_points_22 = camera.cam_point_from_pixel(matched_points2[gm].keypoint.pt, 20000);
-    cam_points_21   = from1to2 * cam_points_21;
-    cam_points_22   = from1to2 * cam_points_22;
-    cv::Point3f p11 = cv::Point3f(cam_points_11.at<double>(0,0), cam_points_11.at<double>(1,0), cam_points_11.at<double>(2,0));
-    cv::Point3f p12 = cv::Point3f(cam_points_12.at<double>(0,0), cam_points_12.at<double>(1,0), cam_points_12.at<double>(2,0));
-    cv::Point3f p21 = cv::Point3f(cam_points_21.at<double>(0,0), cam_points_21.at<double>(1,0), cam_points_21.at<double>(2,0));
-    cv::Point3f p22 = cv::Point3f(cam_points_22.at<double>(0,0), cam_points_22.at<double>(1,0), cam_points_22.at<double>(2,0));  
-    std::vector<double> solution = _slam__solve_linear_system(p11, p12, p21, p22); 
-    //////////////// 
-    
-    cv::Mat camera_matrix_e = _camera_matrix43(camera.camera_matrix);
+    std::vector<cv::Point2f> corners1;
+    std::vector<cv::Point2f> corners2;
+    corners1.push_back(matched_points1[gm].keypoint.pt);
+    corners2.push_back(matched_points2[gm].keypoint.pt);
+    cv::cornerSubPix(gray_1, corners1, cvSize(5, 5), cvSize(-1,-1), cvTermCriteria (CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 40, 0.01));
+    cv::cornerSubPix(gray_2, corners2, cvSize(5, 5), cvSize(-1,-1), cvTermCriteria (CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 40, 0.01));
+    matched_points1[gm].keypoint.pt = corners1[0];
+    matched_points2[gm].keypoint.pt = corners2[0];
+    //std::cout << matched_points1[gm].keypoint.pt << " " << corners[0] << std::endl;
     cv::Point3d norm_p1 = _normalized_point(camera.camera_matrix, matched_points1[gm].keypoint.pt);
     cv::Point3d norm_p2 = _normalized_point(camera.camera_matrix, matched_points2[gm].keypoint.pt);
-    cv::Mat X = _slam__linear_triangulation(norm_p1,
-                                            pose1, 
-                                            norm_p2,
-                                            pose2);
-    /*pose2.convertTo(pose2, CV_64FC1);
-    _camera_matrix43(camera.camera_matrix).convertTo(camera.camera_matrix, CV_64FC1);
-    X.convertTo(X, CV_64FC1);
-    std::cout << camera.camera_matrix << " " << pose2 << " " << X << std::endl;
-    cv::Mat_<double> xPt_img = camera.camera_matrix * pose2;
-    std::cout << xPt_img << std::endl;
-    cv::Point2f xPt_img_(xPt_img(0) / xPt_img(2), xPt_img(1) / xPt_img(2));
-    std::cout << cv::norm(xPt_img_-matched_points2[gm].keypoint.pt) << std::endl;*/
-    ////////////////
-    if (solution[0] < -9999998) { continue; } 
-
-    //matched_points2[gm].coords_3D = match_position_in_marker_frame(pose2.inv(), cv::Point3d(solution[3], solution[4], solution[5]));
-    matched_points2[gm].coords_3D = cv::Point3d(X.at<double>(0,0), X.at<double>(1,0), X.at<double>(2,0)); // match_position_in_marker_frame(pose2.inv(), cv::Point3d(X.at<double>(0,0), X.at<double>(1,0), X.at<double>(2,0))); 
-    //std::cout << X << " " <<  match_position_in_marker_frame(pose2.inv(), cv::Point3d(solution[3], solution[4], solution[5])) << std::endl;
-    //std::cout << X << std::endl;
-    //std::cout << "RESULT: " << X << " tr3d: " << /*cv::Point3d(solution[3], solution[4], solution[5])*/ matched_points2[gm].coords_3D <<  std::endl;
+    cv::Mat X = _slam__linear_triangulation_iterative(norm_p1, pose1, norm_p2, pose2);
+    std::vector<cv::Point3f> object_points;
+    std::vector<cv::Point2f> image_points;
+    object_points.push_back(cv::Point3f(X.at<double>(0,0), X.at<double>(1,0), X.at<double>(2,0)));
+    cv::projectPoints(object_points, rot_mat_from_pose(pose2), tr_vec_from_pose(pose2), camera.camera_matrix, camera.distorsion, image_points);
+    float err = sqrt(pow(image_points[0].x - matched_points2[gm].keypoint.pt.x, 2) + 
+                     pow(image_points[0].y - matched_points2[gm].keypoint.pt.y, 2));
+    if (err > slam_sys_pfr_pr.triangulation_relative_error) { continue; } 
+    matched_points2[gm].coords_3D = cv::Point3d(X.at<double>(0,0), X.at<double>(1,0), X.at<double>(2,0)); 
     matched_points2[gm].pose = pose2;
     matched_points2[gm].hits++;
     matched_points2[gm].pixel_colors = image_1.at<cv::Vec3b>(matched_points1[gm].keypoint.pt.y, matched_points1[gm].keypoint.pt.x);
@@ -461,7 +447,7 @@ _slam__triangulate(CameraSystem camera,
     if (solution[0] < -9999998) { continue; } 
     matched_points2[gm].coords_3D = match_position_in_marker_frame(from1to2.inv(), cv::Point3d(solution[3], solution[4], solution[5]));
     matched_points2[gm].hits++;
-    //matched_points2[gm].pixel_colors()
+    matched_points2[gm].pixel_colors = image_1.at<cv::Vec3b>(matched_points1[gm].keypoint.pt.y, matched_points1[gm].keypoint.pt.x);
     total_matches.push_back(matched_points2[gm]);
   }
   return total_matches;
@@ -505,24 +491,57 @@ matrix_norm(cv::Mat matrix)
   return max;
 }
 
+cv::Mat_<double>  
+_slam__linear_triangulation_iterative(cv::Point3d u,
+                                      cv::Mat P,
+                                      cv::Point3d u1,
+                                      cv::Mat P1)
+{
+  double THRESH = 0.0000001f;
+  double wi = 1, wi1 = 1;
+  cv::Mat_<double> X(4,1);
+  cv::Mat_<double> X_ = _slam__linear_triangulation(u, P, u1, P1);
+  X(0) = X_(0);
+  X(1) = X_(1);
+  X(2) = X_(2);
+  X(3) = 1;
+  for (int i = 0; i < 10; i++) {
+    double p2x  = cv::Mat_<double>(cv::Mat(P).row(2) *  X)(0);
+    double p2x1 = cv::Mat_<double>(cv::Mat(P1).row(2) * X)(0);
+    if (std::abs(wi - p2x) <= THRESH && std::abs(wi1 - p2x1) <= THRESH) { break; }
+    wi  = p2x;
+    wi1 = p2x1;
+    cv::Matx43d A((u.x  * P.at<double>(2,0)  - P.at<double>(0,0))  / wi,  (u.x  * P.at<double>(2,1)  - P.at<double>(0,1))  / wi,    (u.x *  P.at<double>(2,2)  - P.at<double>(0,2))  / wi,   
+                  (u.y  * P.at<double>(2,0)  - P.at<double>(1,0))  / wi,  (u.y  * P.at<double>(2,1)  - P.at<double>(1,1))  / wi,    (u.y *  P.at<double>(2,2)  - P.at<double>(1,2))  / wi,   
+                  (u1.x * P1.at<double>(2,0) - P1.at<double>(0,0)) / wi1, (u1.x * P1.at<double>(2,1) - P1.at<double>(0,1)) / wi1,   (u1.x * P1.at<double>(2,2) - P1.at<double>(0,2)) / wi1, 
+                  (u1.y * P1.at<double>(2,0) - P1.at<double>(1,0)) / wi1, (u1.y * P1.at<double>(2,1) - P1.at<double>(1,1)) / wi1,   (u1.y * P1.at<double>(2,2) - P1.at<double>(1,2)) / wi1);
+    cv::Mat_<double> B = (cv::Mat_<double>(4,1) << -(u.x  * P.at<double>(2,3)  - P.at<double>(0,3))  / wi,
+                                                   -(u.y  * P.at<double>(2,3)  - P.at<double>(1,3))  / wi, 
+                                                   -(u1.x * P1.at<double>(2,3) - P1.at<double>(0,3)) / wi1, 
+                                                   -(u1.y * P1.at<double>(2,3) - P1.at<double>(1,3)) / wi1);
+    cv::solve(A, B, X_, cv::DECOMP_SVD);
+    X(0) = X_(0); 
+    X(1) = X_(1); 
+    X(2) = X_(2); 
+    X(3) = 1.0;
+  }
+  return X; 
+}
+
 cv::Mat_<double>
 _slam__linear_triangulation(cv::Point3d u,
                             cv::Mat P,
                             cv::Point3d u1,
                             cv::Mat P1)
 {
-  //build A matrix
   cv::Matx43d A(u.x  * P.at<double>(2,0)  -P.at<double>(0,0),   u.x  * P.at<double>(2,1)  - P.at<double>(0,1),   u.x*P.at<double>(2,2)   - P.at<double>(0,2),
                 u.y  * P.at<double>(2,0)  -P.at<double>(1,0),   u.y  * P.at<double>(2,1)  - P.at<double>(1,1),   u.y*P.at<double>(2,2)   - P.at<double>(1,2),
                 u1.x * P1.at<double>(2,0) -P1.at<double>(0,0),  u1.x * P1.at<double>(2,1) - P1.at<double>(0,1),  u1.x*P1.at<double>(2,2) - P1.at<double>(0,2),
                 u1.y * P1.at<double>(2,0) -P1.at<double>(1,0),  u1.y * P1.at<double>(2,1) - P1.at<double>(1,1),  u1.y*P1.at<double>(2,2) - P1.at<double>(1,2));
-  //build B vector
   cv::Matx41d B(-(u.x  * P.at<double>(2,3)  - P.at<double>(0,3)), 
                 -(u.y  * P.at<double>(2,3)  - P.at<double>(1,3)),
                 -(u1.x * P1.at<double>(2,3) - P1.at<double>(0,3)),
                 -(u1.y * P1.at<double>(2,3) - P1.at<double>(1,3)));
-  //std::cout << "A " << A << " B " << B << std::endl;
-  //solve for X
   cv::Mat_<double> X;
   cv::solve(A, B, X, cv::DECOMP_SVD);
   return X; 

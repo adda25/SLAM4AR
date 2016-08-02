@@ -86,6 +86,12 @@ SlamAPI::map_update(cv::Mat &frame, cv::Mat pose)
 }
 
 void 
+SlamAPI::adjust_map() 
+{
+  slam__adjust_map(slam_sys);
+}
+
+void 
 SlamAPI::map_update_stereo(cv::Mat &frame_1, cv::Mat &frame_2)
 {
   // TODO

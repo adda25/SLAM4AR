@@ -41,9 +41,7 @@ std::vector<MapPoint> slam__map(const SlamSystem &slam_sys,
                                 const cv::Mat &pose_1, 
                                 const cv::Mat &pose_2);
 
-std::vector<MapPoint> slam__map(const SlamSystem &slam_sys,
-                                const ImageForMapping &im_data_1,
-                                const ImageForMapping &im_data_2);
+void slam__adjust_map(const SlamSystem &slam_sys);
 
 cv::Mat slam__localize(const SlamSystem &slam_sys, 
                        const Map &map, 

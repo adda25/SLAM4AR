@@ -269,8 +269,7 @@ map__write(std::string filename, const Map &map_to_write, bool write_grid)
   }
   for (auto &s : map_to_write) {
     for (auto &p : s.sector_points) {
-      //std::cout << (int)p.pixel_colors.val[0] << std::endl;
-        ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << (int)p.pixel_colors.val[0] << " " << (int)p.pixel_colors.val[1] << " " << (int)p.pixel_colors.val[2] << "\n";
+      ofs << p.coords_3D.x << " " << p.coords_3D.y << " " << p.coords_3D.z << " " << (int)p.pixel_colors.val[2] << " " << (int)p.pixel_colors.val[1] << " " << (int)p.pixel_colors.val[0] << "\n";
     }
   }
   ofs.close();

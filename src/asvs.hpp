@@ -24,7 +24,7 @@ Developed by Amedeo Setti
 class SlamAPI
 {
 public:
-  SlamAPI() {
+  SlamAPI() : keyframes_map() {
     map_init();
   }
   SlamAPI(std::string camera_path) 
@@ -47,6 +47,8 @@ public:
 
   /* TODO: Compute the map with stereo cameras */
   void map_update_stereo(cv::Mat &frame_1, cv::Mat &frame_2);
+  
+  void adjust_map();
 
   void map_remove_old_sectors();
   void map_reset();
@@ -62,6 +64,7 @@ public:
     
   void visualize(cv::Mat &frame, cv::Mat &pose, bool draw_map, bool draw_sr);
 
+  KeyframesMap keyframes_map;
   Map map;
   SlamSystem slam_sys;
   double min_dist = 30.0;

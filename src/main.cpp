@@ -33,8 +33,8 @@ main(int argc, char** argv)
   //test_map_system(params);
   //save_video_frames(params);
   //test_map_system_5_point(params);
-  test_map_localize_update(params);
-  //test_map_and_pose_system(params);
+  //test_map_localize_update(params);
+  test_map_and_pose_system(params);
   //test_write_and_load_map(params);
   //test_find_object(params);
   return 0;
@@ -86,7 +86,7 @@ test_map_system(std::vector<int> params)
 void 
 test_map_localize_update(std::vector<int> params)
 {
-  std::string video_path = "/Users/adda/Work/Eyes/src/video/IMG_0446.m4v";
+  std::string video_path = "/Users/adda/Work/Eyes/src/video/IMG_0434.m4v";
   MyMarkerDetector marker_detector = MyMarkerDetector(120.0, camera_path);
   cv::Mat frame;
   cv::Mat estimated_pose;
@@ -107,7 +107,7 @@ test_map_localize_update(std::vector<int> params)
   std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1);
   std::cout << "MAP TIME: " << " " << time_span.count() << " seconds." << std::endl; 
   slam.map_write_point_cloud("initial_map.txt", true);
-  
+  slam.adjust_map();
   // Localize and update the map
   std::vector<cv::Mat> estimated_poses;
   for (int i = params[1]; i < params[2]; i++) {
@@ -119,7 +119,7 @@ test_map_localize_update(std::vector<int> params)
   }
   slam.map_write_point_cloud("final_map.txt", true);
   std::ofstream ofs;
-  ofs.open ("poses.csv", std::ofstream::out | std::ofstream::app);
+  ofs.open ("poses.csv", std::ofstream::trunc);
   ofs << "e_x, " << "e_y, " << "e_z, " << "\n";
   for (int i = 0; i < estimated_poses.size(); i++) {
     ofs << estimated_poses[i].at<double>(0,3) << "," << estimated_poses[i].at<double>(1,3)  << "," << estimated_poses[i].at<double>(2,3)  << "\n";
@@ -167,14 +167,25 @@ test_map_and_pose_system(std::vector<int> params)
     if (m1.marker.size() == 0) { continue; } 
     slam.map_update(frame, m1.marker[0].pose());
   }
+  slam.adjust_map();
   slam.map_write_point_cloud("map.txt", false);
+  std::vector<cv::Mat> poses;
   for (int i = 0; i < params[2]; i++) {
     capture_test >> frame;
     printf("Progress loc: %d / %d \r", i, params[2]);
     if (frame.cols == 0) { break; }
     slam.localize(frame, estimated_pose);
+    poses.push_back(estimated_pose);
     slam.visualize(frame, estimated_pose, true, true);
   }
+  std::ofstream ofs;
+  ofs.open ("poses.csv", std::ofstream::trunc);
+  ofs << "e_x, " << "e_y, " << "e_z, " << "\n";
+  for (int i = 0; i < poses.size(); i++) {
+    ofs << poses[i].at<double>(0,3) << "," << poses[i].at<double>(1,3)  << "," << poses[i].at<double>(2,3)  << "\n";
+  }
+  ofs.close();
+
 }
 
 /*

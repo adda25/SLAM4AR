@@ -12,9 +12,13 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <ctime>
 #include <stdint.h>
 #include <opencv2/opencv.hpp>
+#include "bundle_adjuster.hpp"
 #include "camera_param_reader.hpp"
+
+typedef unsigned int uint;
 
 typedef struct
 {
@@ -57,8 +61,105 @@ typedef struct
   std::vector<cv::Mat>  sector_poses;
 } MapSector;
 
-
 typedef std::vector<MapSector> Map;
+
+///////////////////////////////////////////////////////////////
+// A new map type
+// based on keyframes
+class Keyframe
+{
+public:
+  std::vector<cv::Point3f> coords_3D;
+  std::vector<cv::KeyPoint> keypoints;
+  std::vector<int> keypoint_index;
+  cv::Mat descriptors;
+  cv::Mat pose;
+  cv::Mat frame;
+  Keyframe() {};
+  Keyframe(cv::Mat p, cv::Mat f, int descriptor_size): pose(p), frame(f) 
+  {
+    time(&key_frame_init_time);
+    descriptors = cv::Mat(0, descriptor_size, CV_8U);
+  };
+  bool is_good();
+
+private:
+  time_t key_frame_init_time;
+  double keyframe_mean_error;
+};
+
+class KeyframesMap
+{
+public:
+  std::vector<Keyframe> keyframes;
+  KeyframesMap() {};
+  KeyframesMap(std::vector<Keyframe> kf) : keyframes(kf) {}; 
+  void operator<<(Keyframe keyframe) 
+  {
+    keyframes.push_back(keyframe);
+  }
+  Keyframe end() {
+    if (keyframes.empty()) { return Keyframe(); }
+    return keyframes.back();
+  }
+
+  void adjust(cv::Mat camera_matrix) {
+    // Convert to right structure
+    std::vector<cv::Mat> cams;
+    std::vector<cv::Point3f> point3d;
+    std::vector<cv::Point2f> meas;
+    std::vector<int> cam_idx;
+    std::vector<int> pt3d_idx;
+    
+    for (int n_kf = 0; n_kf < keyframes.size(); n_kf++) {
+      cams.push_back(keyframes[n_kf].pose);
+    }
+    
+    for (int n_kf = 0; n_kf < keyframes.size(); n_kf++) {
+      for (int n_3dpt = 0; n_3dpt < keyframes[n_kf].coords_3D.size(); n_3dpt++) {
+        point3d.push_back(keyframes[n_kf].coords_3D[n_3dpt]);
+
+        cv::Point2f ppo = keyframes[n_kf].keypoints[n_3dpt].pt;
+        ppo.x -= 640.0f;
+        ppo.y -= 360.0f;
+        meas.push_back(ppo);
+        cam_idx.push_back(n_kf);
+        pt3d_idx.push_back(point3d.size() - 1);
+      }
+    }
+    bundle_adjustement_pba(cams, point3d, meas, cam_idx, pt3d_idx);
+  }
+
+  Map convert_to_map();
+  
+
+private:
+
+  cv::Mat 
+tr_vec_from_pose(cv::Mat pose)
+{
+  cv::Mat tr_vec(3, 1, CV_64F);
+  tr_vec.at<double>(0,0) = pose.at<double>(0,3);
+  tr_vec.at<double>(0,1) = pose.at<double>(1,3);
+  tr_vec.at<double>(0,2) = pose.at<double>(2,3);
+  return tr_vec;
+}
+
+cv::Mat 
+rot_mat_from_pose(cv::Mat pose)
+{
+  cv::Mat rot_mat(3, 3, CV_64F);
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      rot_mat.at<double>(row,col) = pose.at<double>(row, col);
+    }
+  }
+  return rot_mat;
+}
+
+};
+///////////////////////////////////////////////////////////////
+
 
 /*  sectors[3] = [n_x, n_y, n_z]
 sector_size[3] = [s_x, s_y, s_z] 
@@ -118,3 +219,46 @@ void map__image_points_for_pose(const Map &map,
 
 #endif // End __MAP_HPP__
 
+/*
+// Convert to right structure
+    std::vector<cv::Mat> cams;
+    std::vector<cv::Point3f> point3d;
+    std::vector<cv::Point2f> meas;
+    std::vector<int> cam_idx;
+    std::vector<int> pt3d_idx;
+    for (int n_kf = 0; n_kf < keyframes.size(); n_kf++) {
+      cams.push_back(keyframes[n_kf].pose);
+      for (int n_3dpt = 0; n_3dpt < keyframes[n_kf].coords_3D.size(); n_3dpt++) {
+        point3d.push_back(keyframes[n_kf].coords_3D[n_3dpt]);
+        meas.push_back(keyframes[n_kf].keypoints[n_3dpt].pt);
+        cam_idx.push_back(n_kf);
+        pt3d_idx.push_back(n_3dpt);
+      }
+    }
+    bundle_adjustement_pba(cams, point3d, meas, cam_idx, pt3d_idx);
+*/
+/*
+std::vector<CloudPoint> pointcloud;
+    std::vector<std::vector<cv::KeyPoint>> imgpts;
+    std::map<int, cv::Matx34d> Pmats;
+    int index = 0;
+    int total_size = 0;
+    for (auto &kf : keyframes) {
+      for (int i = 0; i < kf.coords_3D.size(); i++) {
+        CloudPoint cp;
+        cp.pt = kf.coords_3D[i];
+        cp.imgpt_for_img.push_back(i);
+        pointcloud.push_back(cp);
+      }
+      total_size += kf.coords_3D.size();  
+      imgpts.push_back(kf.keypoints);      
+      cv::Mat R = rot_mat_from_pose(kf.pose);
+      cv::Mat T = tr_vec_from_pose(kf.pose);
+      cv::Matx34d P;
+      P(0,0) = R.at<double>(0,0); P(0,1) = R.at<double>(0,1); P(0,2) = R.at<double>(0,2); P(0,3) = T.at<double>(0,0);
+      P(1,0) = R.at<double>(1,0); P(1,1) = R.at<double>(1,1); P(1,2) = R.at<double>(1,2); P(1,3) = T.at<double>(1,0);
+      P(2,0) = R.at<double>(2,0); P(2,1) = R.at<double>(2,1); P(2,2) = R.at<double>(2,2); P(2,3) = T.at<double>(2,0);
+      Pmats[index] = P;
+      index++;
+    }
+*/
